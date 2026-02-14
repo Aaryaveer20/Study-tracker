@@ -4,6 +4,7 @@ let currentChapterId = null;
 let currentChartView = 'day';
 let firebaseInitialized = false;
 let userListeners = {}; // Track active listeners
+let isSaving = false; // ⭐ NEW: Flag to prevent overwrites during save
 
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -40,11 +41,19 @@ function generateUserId() {
 // Firebase Operations
 async function saveUserToFirebase(user) {
     try {
+        isSaving = true; // ⭐ Set flag before saving
         const userRef = window.dbRef(window.db, 'users/' + user.id);
         await window.dbSet(userRef, user);
         console.log('✅ User saved');
+        
+        // ⭐ Wait a bit before allowing overwrites
+        setTimeout(() => {
+            isSaving = false;
+        }, 500);
+        
         return true;
     } catch (error) {
+        isSaving = false;
         console.error('❌ Save error:', error);
         alert('Error saving: ' + error.message);
         return false;
@@ -99,6 +108,12 @@ function setupRealtimeSync(userId) {
     window.dbOnValue(userRef, (snapshot) => {
         if (snapshot.exists()) {
             const updatedUser = snapshot.val();
+            
+            // ⭐ FIX: Don't overwrite if we're currently saving
+            if (isSaving) {
+                console.log('⏸️ Skipping sync - currently saving');
+                return;
+            }
             
             // ⭐ FIX: Ensure all required fields exist
             if (!updatedUser.chapters) {
