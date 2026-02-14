@@ -898,8 +898,6 @@ async function sendMessage() {
     const chatId = getChatId(currentUser.id, currentChatFriend);
     const messagesRef = window.dbRef(window.db, 'chats/' + chatId + '/messages');
     
-    const newMessageRef = window.dbRef(window.db, 'chats/' + chatId + '/messages/' + Date.now());
-    
     const message = {
         text: text,
         senderId: currentUser.id,
@@ -908,7 +906,10 @@ async function sendMessage() {
     };
     
     try {
+        // Use push to create a new message with auto-generated key
+        const newMessageRef = window.dbPush(messagesRef);
         await window.dbSet(newMessageRef, message);
+        
         input.value = '';
         input.focus();
     } catch (error) {
