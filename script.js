@@ -893,10 +893,13 @@ async function sendMessage() {
     const input = document.getElementById('chatInput');
     const text = input.value.trim();
     
-    if (!text || !currentChatFriend) return;
+    if (!text || !currentChatFriend) {
+        console.log('No text or no friend selected');
+        return;
+    }
     
     const chatId = getChatId(currentUser.id, currentChatFriend);
-    const messagesRef = window.dbRef(window.db, 'chats/' + chatId + '/messages');
+    const messageId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     
     const message = {
         text: text,
@@ -906,15 +909,36 @@ async function sendMessage() {
     };
     
     try {
-        // Use push to create a new message with auto-generated key
-        const newMessageRef = window.dbPush(messagesRef);
-        await window.dbSet(newMessageRef, message);
+        // Try to write to chats location
+        const messageRef = window.dbRef(window.db, `chats/${chatId}/messages/${messageId}`);
+        await window.dbSet(messageRef, message);
         
+        console.log('Message sent successfully');
         input.value = '';
         input.focus();
     } catch (error) {
         console.error('Error sending message:', error);
-        showToast('Failed to send message', 'error');
+        console.error('Error details:', error.message, error.code);
+        
+        // Show instructions to user
+        showToast('Database permission error. Check console for details.', 'error');
+        
+        // Log helpful message
+        console.log('%c📝 Firebase Database Rules Error', 'color: red; font-size: 16px; font-weight: bold');
+        console.log('%cTo fix this, go to Firebase Console → Realtime Database → Rules', 'color: orange; font-size: 14px');
+        console.log('%cAnd update rules to:', 'color: orange; font-size: 14px');
+        console.log(`%c{
+  "rules": {
+    "users": {
+      ".read": true,
+      ".write": true
+    },
+    "chats": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}`, 'background: #f4f4f4; padding: 10px; font-family: monospace; color: #333');
     }
 }
 
