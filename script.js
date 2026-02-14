@@ -58,6 +58,24 @@ async function loadUserFromFirebase(userId) {
         
         if (snapshot.exists()) {
             currentUser = snapshot.val();
+            
+            // ⭐ FIX: Ensure all required fields exist
+            if (!currentUser.chapters) {
+                currentUser.chapters = [];
+            }
+            if (!currentUser.friends) {
+                currentUser.friends = [];
+            }
+            if (!currentUser.pointsHistory) {
+                currentUser.pointsHistory = { daily: {}, weekly: {}, monthly: {} };
+            }
+            if (currentUser.points === undefined) {
+                currentUser.points = 0;
+            }
+            
+            // Save the complete structure back to Firebase
+            await saveUserToFirebase(currentUser);
+            
             localStorage.setItem('currentUserId', userId);
             showDashboard();
             
@@ -269,9 +287,17 @@ async function addChapter() {
     const description = document.getElementById('chapterDescription').value.trim();
     
     console.log('Adding chapter:', name);
+    console.log('Current user:', currentUser); // Debug log
     
     if (!name) {
         alert('Please enter a chapter name');
+        return;
+    }
+    
+    // ⭐ FIX: Check if user is logged in
+    if (!currentUser) {
+        alert('Error: Not logged in. Please refresh the page and login again.');
+        console.error('currentUser is null!');
         return;
     }
     
