@@ -15,9 +15,29 @@ let currentTimerChapterId = null;
 let activeChatFriend = null;
 let chatListener = null;
 
+// Force proper screen switching
+function switchToScreen(screenId) {
+    // Hide all screens
+    document.querySelectorAll('.screen').forEach(screen => {
+        screen.classList.remove('active');
+        screen.style.display = 'none';
+    });
+    
+    // Show only the target screen
+    const targetScreen = document.getElementById(screenId);
+    if (targetScreen) {
+        targetScreen.classList.add('active');
+        targetScreen.style.display = 'flex';
+    }
+    
+    console.log('✅ Switched to:', screenId);
+}
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded');
+    // Ensure only auth screen is visible initially
+    switchToScreen('authScreen');
     // Wait for Firebase
     waitForFirebase();
 });
@@ -255,15 +275,17 @@ function logout() {
     
     localStorage.removeItem('currentUserId');
     currentUser = null;
-    document.getElementById('authScreen').classList.add('active');
-    document.getElementById('dashboardScreen').classList.remove('active');
+    
+    // Switch to auth screen properly
+    switchToScreen('authScreen');
+    
     document.getElementById('usernameInput').value = '';
     generateUserId();
 }
 
 function showDashboard() {
-    document.getElementById('authScreen').classList.remove('active');
-    document.getElementById('dashboardScreen').classList.add('active');
+    // Switch to dashboard screen properly
+    switchToScreen('dashboardScreen');
     
     document.getElementById('navUsername').textContent = currentUser.username;
     document.getElementById('navUserId').textContent = currentUser.id;
