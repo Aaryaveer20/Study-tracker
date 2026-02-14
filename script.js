@@ -4,7 +4,16 @@ let currentChapterId = null;
 let currentChartView = 'day';
 let firebaseInitialized = false;
 let userListeners = {}; // Track active listeners
-let isSaving = false; // ⭐ NEW: Flag to prevent overwrites during save
+let isSaving = false; // Flag to prevent overwrites during save
+
+// Timer variables
+let timerInterval = null;
+let timerSeconds = 0;
+let currentTimerChapterId = null;
+
+// Chat variables
+let activeChatFriend = null;
+let chatListener = null;
 
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -41,12 +50,12 @@ function generateUserId() {
 // Firebase Operations
 async function saveUserToFirebase(user) {
     try {
-        isSaving = true; // ⭐ Set flag before saving
+        isSaving = true; // Set flag before saving
         const userRef = window.dbRef(window.db, 'users/' + user.id);
         await window.dbSet(userRef, user);
         console.log('✅ User saved');
         
-        // ⭐ Wait a bit before allowing overwrites
+        // Wait a bit before allowing overwrites
         setTimeout(() => {
             isSaving = false;
         }, 500);
@@ -68,7 +77,7 @@ async function loadUserFromFirebase(userId) {
         if (snapshot.exists()) {
             currentUser = snapshot.val();
             
-            // ⭐ FIX: Ensure all required fields exist
+            // Ensure all required fields exist
             if (!currentUser.chapters) {
                 currentUser.chapters = [];
             }
@@ -88,7 +97,7 @@ async function loadUserFromFirebase(userId) {
             localStorage.setItem('currentUserId', userId);
             showDashboard();
             
-            // ⭐ NEW: Start listening for real-time updates
+            // Start listening for real-time updates
             setupRealtimeSync(userId);
         } else {
             localStorage.removeItem('currentUserId');
@@ -100,7 +109,7 @@ async function loadUserFromFirebase(userId) {
     }
 }
 
-// ⭐ NEW: Real-time sync for current user
+// Real-time sync for current user
 function setupRealtimeSync(userId) {
     const userRef = window.dbRef(window.db, 'users/' + userId);
     
@@ -109,13 +118,13 @@ function setupRealtimeSync(userId) {
         if (snapshot.exists()) {
             const updatedUser = snapshot.val();
             
-            // ⭐ FIX: Don't overwrite if we're currently saving
+            // Don't overwrite if we're currently saving
             if (isSaving) {
                 console.log('⏸️ Skipping sync - currently saving');
                 return;
             }
             
-            // ⭐ FIX: Ensure all required fields exist
+            // Ensure all required fields exist
             if (!updatedUser.chapters) {
                 updatedUser.chapters = [];
             }
@@ -135,13 +144,13 @@ function setupRealtimeSync(userId) {
                 updatePoints();
                 renderChapters();
                 renderStats();
-                renderLeaderboard(); // This will also refresh friend data
+                renderLeaderboard();
             }
         }
     });
 }
 
-// ⭐ NEW: Real-time sync for friends
+// Real-time sync for friends
 function setupFriendsRealtimeSync() {
     // Clean up old listeners
     if (userListeners.friends) {
@@ -165,6 +174,7 @@ function setupFriendsRealtimeSync() {
                 // Refresh friends list and leaderboard
                 renderFriends();
                 renderLeaderboard();
+                renderChatFriendsList();
             }
         });
         
@@ -219,7 +229,7 @@ async function login() {
         localStorage.setItem('currentUserId', userId);
         showDashboard();
         
-        // ⭐ NEW: Start real-time sync after login
+        // Start real-time sync after login
         setupRealtimeSync(userId);
         setupFriendsRealtimeSync();
         
@@ -235,6 +245,12 @@ function logout() {
     if (userListeners.friends) {
         userListeners.friends.forEach(unsubscribe => unsubscribe());
         userListeners.friends = [];
+    }
+    
+    // Clean up chat listener
+    if (chatListener) {
+        chatListener();
+        chatListener = null;
     }
     
     localStorage.removeItem('currentUserId');
@@ -257,6 +273,7 @@ function showDashboard() {
     renderFriends();
     renderLeaderboard();
     renderStats();
+    renderChatFriendsList();
 }
 
 function updatePoints() {
@@ -274,6 +291,9 @@ function showSection(section) {
         document.getElementById('chaptersSection').classList.add('active');
     } else if (section === 'friends') {
         document.getElementById('friendsSection').classList.add('active');
+    } else if (section === 'chat') {
+        document.getElementById('chatSection').classList.add('active');
+        renderChatFriendsList();
     } else if (section === 'leaderboard') {
         document.getElementById('leaderboardSection').classList.add('active');
     } else if (section === 'stats') {
@@ -302,14 +322,14 @@ async function addChapter() {
     const description = document.getElementById('chapterDescription').value.trim();
     
     console.log('Adding chapter:', name);
-    console.log('Current user:', currentUser); // Debug log
+    console.log('Current user:', currentUser);
     
     if (!name) {
         alert('Please enter a chapter name');
         return;
     }
     
-    // ⭐ FIX: Check if user is logged in
+    // Check if user is logged in
     if (!currentUser) {
         alert('Error: Not logged in. Please refresh the page and login again.');
         console.error('currentUser is null!');
@@ -322,10 +342,11 @@ async function addChapter() {
         description: description,
         completed: false,
         points: 10,
-        completedDate: null
+        completedDate: null,
+        timeSpent: 0 // Time in seconds
     };
     
-    // ⭐ FIX: Initialize chapters array if it doesn't exist
+    // Initialize chapters array if it doesn't exist
     if (!currentUser.chapters) {
         currentUser.chapters = [];
     }
@@ -340,6 +361,20 @@ async function addChapter() {
         renderChapters();
         renderStats();
         showToast('✅ Chapter added!', 'success');
+    }
+}
+
+function formatTime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`;
+    } else {
+        return `${secs}s`;
     }
 }
 
@@ -360,16 +395,104 @@ function renderChapters() {
                 </div>
             </div>
             ${chapter.description ? `<div class="chapter-description">${chapter.description}</div>` : ''}
+            <div class="chapter-time">
+                ⏱️ Time spent: <strong>${formatTime(chapter.timeSpent || 0)}</strong>
+            </div>
             <div class="chapter-footer">
                 <div class="chapter-points">🏆 ${chapter.points} points</div>
-                <button class="btn-complete" 
-                        onclick="openQuizModal(${chapter.id})" 
-                        ${chapter.completed ? 'disabled' : ''}>
-                    ${chapter.completed ? 'Completed' : 'Mark as Done'}
-                </button>
+                <div class="chapter-actions">
+                    <button class="btn-timer" 
+                            onclick="openTimerModal(${chapter.id})"
+                            ${chapter.completed ? 'disabled' : ''}>
+                        ⏱️ ${chapter.timeSpent > 0 ? 'Continue' : 'Start'} Timer
+                    </button>
+                    <button class="btn-complete" 
+                            onclick="openQuizModal(${chapter.id})" 
+                            ${chapter.completed ? 'disabled' : ''}>
+                        ${chapter.completed ? 'Completed' : 'Mark as Done'}
+                    </button>
+                </div>
             </div>
         </div>
     `).join('');
+}
+
+// Timer Functions
+function openTimerModal(chapterId) {
+    currentTimerChapterId = chapterId;
+    const chapter = currentUser.chapters.find(c => c.id === chapterId);
+    
+    if (!chapter) return;
+    
+    document.getElementById('timerChapterName').textContent = chapter.name;
+    timerSeconds = 0;
+    updateTimerDisplay();
+    
+    document.getElementById('timerModal').classList.add('active');
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+    document.getElementById('stopBtn').disabled = true;
+}
+
+function closeTimerModal() {
+    if (timerInterval) {
+        pauseTimer();
+    }
+    document.getElementById('timerModal').classList.remove('active');
+    currentTimerChapterId = null;
+    timerSeconds = 0;
+}
+
+function startTimer() {
+    if (timerInterval) return;
+    
+    timerInterval = setInterval(() => {
+        timerSeconds++;
+        updateTimerDisplay();
+    }, 1000);
+    
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('pauseBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = false;
+}
+
+function pauseTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('pauseBtn').disabled = true;
+}
+
+async function stopTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    
+    const chapter = currentUser.chapters.find(c => c.id === currentTimerChapterId);
+    
+    if (chapter && timerSeconds > 0) {
+        chapter.timeSpent = (chapter.timeSpent || 0) + timerSeconds;
+        
+        await saveUserToFirebase(currentUser);
+        renderChapters();
+        renderStats();
+        
+        showToast(`⏱️ Saved ${formatTime(timerSeconds)} to ${chapter.name}`, 'success');
+    }
+    
+    closeTimerModal();
+}
+
+function updateTimerDisplay() {
+    const hours = String(Math.floor(timerSeconds / 3600)).padStart(2, '0');
+    const minutes = String(Math.floor((timerSeconds % 3600) / 60)).padStart(2, '0');
+    const seconds = String(timerSeconds % 60).padStart(2, '0');
+    
+    document.getElementById('timerDisplay').textContent = `${hours}:${minutes}:${seconds}`;
 }
 
 // Quiz Modal
@@ -483,12 +606,13 @@ async function addFriend() {
     currentUser.friends.push(friendId);
     await saveUserToFirebase(currentUser);
     
-    // ⭐ NEW: Setup real-time sync for the new friend
+    // Setup real-time sync for the new friend
     setupFriendsRealtimeSync();
     
     closeAddFriendModal();
     renderFriends();
     renderLeaderboard();
+    renderChatFriendsList();
     showToast('Friend added!', 'success');
 }
 
@@ -516,6 +640,129 @@ async function renderFriends() {
             <div class="friend-points">${friend.points} pts</div>
         </div>
     `).join('');
+}
+
+// Chat Functions
+async function renderChatFriendsList() {
+    const container = document.getElementById('chatFriendsList');
+    
+    if (!currentUser.friends || currentUser.friends.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>Add friends to start chatting!</p></div>';
+        return;
+    }
+    
+    const friendsData = await Promise.all(
+        currentUser.friends.map(friendId => getUserFromFirebase(friendId))
+    );
+    
+    container.innerHTML = friendsData.filter(f => f).map(friend => `
+        <div class="chat-friend-item ${activeChatFriend === friend.id ? 'active' : ''}" 
+             onclick="openChat('${friend.id}', '${friend.username}')">
+            <div class="friend-avatar">${friend.username.charAt(0).toUpperCase()}</div>
+            <div class="friend-name">${friend.username}</div>
+        </div>
+    `).join('');
+}
+
+function openChat(friendId, friendName) {
+    activeChatFriend = friendId;
+    renderChatFriendsList();
+    
+    const chatWindow = document.getElementById('chatWindow');
+    const chatRoomId = [currentUser.id, friendId].sort().join('_');
+    
+    chatWindow.innerHTML = `
+        <div class="chat-header">
+            <h3>💬 ${friendName}</h3>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="loading">Loading messages...</div>
+        </div>
+        <div class="chat-input-container">
+            <input type="text" id="chatInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendMessage()" />
+            <button onclick="sendMessage()" class="btn-send">Send</button>
+        </div>
+    `;
+    
+    loadMessages(chatRoomId);
+}
+
+function loadMessages(chatRoomId) {
+    // Clean up previous listener
+    if (chatListener) {
+        chatListener();
+    }
+    
+    const messagesRef = window.dbRef(window.db, 'chats/' + chatRoomId);
+    
+    chatListener = window.dbOnValue(messagesRef, (snapshot) => {
+        const messagesContainer = document.getElementById('chatMessages');
+        
+        if (!snapshot.exists()) {
+            messagesContainer.innerHTML = '<div class="empty-state"><p>No messages yet. Say hi! 👋</p></div>';
+            return;
+        }
+        
+        const messages = [];
+        snapshot.forEach(childSnapshot => {
+            messages.push({
+                id: childSnapshot.key,
+                ...childSnapshot.val()
+            });
+        });
+        
+        messagesContainer.innerHTML = messages.map(msg => `
+            <div class="message ${msg.senderId === currentUser.id ? 'sent' : 'received'}">
+                <div class="message-sender">${msg.senderName}</div>
+                <div class="message-text">${escapeHtml(msg.text)}</div>
+                <div class="message-time">${formatMessageTime(msg.timestamp)}</div>
+            </div>
+        `).join('');
+        
+        // Scroll to bottom
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    });
+}
+
+async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    
+    if (!text || !activeChatFriend) return;
+    
+    const chatRoomId = [currentUser.id, activeChatFriend].sort().join('_');
+    const messagesRef = window.dbRef(window.db, 'chats/' + chatRoomId);
+    
+    const message = {
+        text: text,
+        senderId: currentUser.id,
+        senderName: currentUser.username,
+        timestamp: Date.now()
+    };
+    
+    await window.dbPush(messagesRef, message);
+    input.value = '';
+}
+
+function formatMessageTime(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    
+    return date.toLocaleDateString();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Leaderboard
@@ -562,9 +809,17 @@ function renderStats() {
     const total = currentUser.chapters ? currentUser.chapters.length : 0;
     const completed = currentUser.chapters ? currentUser.chapters.filter(c => c.completed).length : 0;
     
+    // Calculate total time spent
+    const totalSeconds = currentUser.chapters ? 
+        currentUser.chapters.reduce((sum, ch) => sum + (ch.timeSpent || 0), 0) : 0;
+    const totalHours = Math.floor(totalSeconds / 3600);
+    const totalMinutes = Math.floor((totalSeconds % 3600) / 60);
+    
     document.getElementById('totalChapters').textContent = total;
     document.getElementById('completedChapters').textContent = completed;
     document.getElementById('totalPoints').textContent = currentUser.points;
+    document.getElementById('totalTimeSpent').textContent = 
+        totalHours > 0 ? `${totalHours}h ${totalMinutes}m` : `${totalMinutes}m`;
 }
 
 function switchChart(view) {
