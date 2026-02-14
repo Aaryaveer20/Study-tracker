@@ -82,6 +82,17 @@ function setupRealtimeSync(userId) {
         if (snapshot.exists()) {
             const updatedUser = snapshot.val();
             
+            // ⭐ FIX: Ensure all required fields exist
+            if (!updatedUser.chapters) {
+                updatedUser.chapters = [];
+            }
+            if (!updatedUser.friends) {
+                updatedUser.friends = [];
+            }
+            if (!updatedUser.pointsHistory) {
+                updatedUser.pointsHistory = { daily: {}, weekly: {}, monthly: {} };
+            }
+            
             // Only update if data actually changed
             if (JSON.stringify(updatedUser) !== JSON.stringify(currentUser)) {
                 console.log('🔄 User data updated from Firebase');
@@ -272,6 +283,11 @@ async function addChapter() {
         points: 10,
         completedDate: null
     };
+    
+    // ⭐ FIX: Initialize chapters array if it doesn't exist
+    if (!currentUser.chapters) {
+        currentUser.chapters = [];
+    }
     
     currentUser.chapters.push(chapter);
     console.log('Total chapters:', currentUser.chapters.length);
