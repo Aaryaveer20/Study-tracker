@@ -44,6 +44,9 @@
                 <button class="menu-btn" onclick="showSection('friends')">
                     👥 Friends
                 </button>
+                <button class="menu-btn" onclick="showSection('chat')">
+                    💬 Chat
+                </button>
                 <button class="menu-btn" onclick="showSection('leaderboard')">
                     🏆 Leaderboard
                 </button>
@@ -78,6 +81,49 @@
                     <div class="friends-list" id="friendsList">
                         <div class="empty-state">
                             <p>👥 No friends added yet. Add friends to compete!</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Chat Section -->
+                <section id="chatSection" class="content-section">
+                    <div class="chat-container">
+                        <div class="chat-sidebar">
+                            <div class="chat-sidebar-header">
+                                <h3>💬 Chats</h3>
+                            </div>
+                            <div class="chat-list" id="chatList">
+                                <div class="empty-state">
+                                    <p>Select a friend to start chatting!</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-main">
+                            <div class="chat-empty-state" id="chatEmptyState">
+                                <div class="empty-state">
+                                    <h3>💬 Start a Conversation</h3>
+                                    <p>Select a friend from the list to begin chatting</p>
+                                </div>
+                            </div>
+                            <div class="chat-window" id="chatWindow" style="display: none;">
+                                <div class="chat-header" id="chatHeader">
+                                    <div class="chat-header-info">
+                                        <div class="chat-avatar" id="chatAvatar"></div>
+                                        <div class="chat-header-details">
+                                            <h3 id="chatUsername"></h3>
+                                            <p id="chatStatus">Online</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="chat-messages" id="chatMessages">
+                                </div>
+                                <div class="chat-input-container">
+                                    <input type="text" id="chatInput" placeholder="Type a message..." onkeypress="handleChatKeyPress(event)" />
+                                    <button onclick="sendMessage()" class="btn-send">
+                                        <span>📤</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </section>
