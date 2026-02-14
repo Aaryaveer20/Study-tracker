@@ -199,6 +199,8 @@ function switchAuthTab(tab) {
     if (tab === 'signup') {
         document.querySelectorAll('.auth-tab')[0].classList.add('active');
         document.getElementById('signupForm').classList.add('active');
+        // Generate new ID when switching to signup
+        generateUserId();
     } else {
         document.querySelectorAll('.auth-tab')[1].classList.add('active');
         document.getElementById('loginForm').classList.add('active');
@@ -215,14 +217,26 @@ async function signUp() {
     
     if (!username) {
         document.getElementById('statusMessage').textContent = 'Please enter a username';
+        document.getElementById('statusMessage').style.color = 'red';
+        return;
+    }
+    
+    if (username.length < 2) {
+        document.getElementById('statusMessage').textContent = 'Username must be at least 2 characters';
+        document.getElementById('statusMessage').style.color = 'red';
         return;
     }
     
     if (!window.firebaseReady) {
         document.getElementById('statusMessage').textContent = 'Please wait, connecting to Firebase...';
+        document.getElementById('statusMessage').style.color = 'orange';
         setTimeout(signUp, 1000);
         return;
     }
+    
+    // Show loading message
+    document.getElementById('statusMessage').textContent = 'Creating account...';
+    document.getElementById('statusMessage').style.color = 'blue';
     
     try {
         // Check if user ID already exists
@@ -230,6 +244,7 @@ async function signUp() {
         
         if (existingUser) {
             document.getElementById('statusMessage').textContent = 'This ID already exists. Please refresh to get a new ID.';
+            document.getElementById('statusMessage').style.color = 'red';
             return;
         }
         
@@ -258,8 +273,32 @@ async function signUp() {
     } catch (error) {
         console.error('Sign up error:', error);
         document.getElementById('statusMessage').textContent = 'Sign up failed: ' + error.message;
+        document.getElementById('statusMessage').style.color = 'red';
     }
 }
+
+// Handle Enter key press
+document.addEventListener('DOMContentLoaded', function() {
+    // Signup form
+    const signupUsername = document.getElementById('signupUsername');
+    if (signupUsername) {
+        signupUsername.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                signUp();
+            }
+        });
+    }
+    
+    // Login form
+    const loginUserId = document.getElementById('loginUserId');
+    if (loginUserId) {
+        loginUserId.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                logIn();
+            }
+        });
+    }
+});
 
 // Log In - Access existing account
 async function logIn() {
@@ -267,14 +306,27 @@ async function logIn() {
     
     if (!userId) {
         document.getElementById('statusMessage').textContent = 'Please enter your ID';
+        document.getElementById('statusMessage').style.color = 'red';
+        return;
+    }
+    
+    // Validate ID format
+    if (!userId.startsWith('ST') || userId.length < 4) {
+        document.getElementById('statusMessage').textContent = 'Invalid ID format. ID should be like ST5X7ABC';
+        document.getElementById('statusMessage').style.color = 'red';
         return;
     }
     
     if (!window.firebaseReady) {
         document.getElementById('statusMessage').textContent = 'Please wait, connecting to Firebase...';
+        document.getElementById('statusMessage').style.color = 'orange';
         setTimeout(logIn, 1000);
         return;
     }
+    
+    // Show loading message
+    document.getElementById('statusMessage').textContent = 'Logging in...';
+    document.getElementById('statusMessage').style.color = 'blue';
     
     try {
         // Check if user exists
@@ -282,6 +334,7 @@ async function logIn() {
         
         if (!existingUser) {
             document.getElementById('statusMessage').textContent = 'Account not found. Please check your ID or sign up.';
+            document.getElementById('statusMessage').style.color = 'red';
             return;
         }
         
@@ -322,6 +375,7 @@ async function logIn() {
     } catch (error) {
         console.error('Login error:', error);
         document.getElementById('statusMessage').textContent = 'Login failed: ' + error.message;
+        document.getElementById('statusMessage').style.color = 'red';
     }
 }
 
