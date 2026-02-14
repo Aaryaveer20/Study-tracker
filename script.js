@@ -6,6 +6,8 @@ let firebaseInitialized = false;
 let userListeners = {}; // Track active listeners
 let isSaving = false; // ⭐ NEW: Flag to prevent overwrites during save
 let pointsChartInstance = null;
+let currentChatFriend = null; // Current chat friend
+let chatListener = null; // Chat listener
 
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -283,6 +285,9 @@ function showSection(section) {
         document.getElementById('chaptersSection').classList.add('active');
     } else if (section === 'friends') {
         document.getElementById('friendsSection').classList.add('active');
+    } else if (section === 'chat') {
+        document.getElementById('chatSection').classList.add('active');
+        loadChatList();
     } else if (section === 'leaderboard') {
         document.getElementById('leaderboardSection').classList.add('active');
     } else if (section === 'stats') {
@@ -759,4 +764,149 @@ async function viewFriendChapters(friendId, friendName) {
 
 function closeFriendChaptersModal() {
     document.getElementById('friendChaptersModal').classList.remove('active');
+}
+
+// Chat Functions
+async function loadChatList() {
+    const container = document.getElementById('chatList');
+    
+    if (!currentUser.friends || currentUser.friends.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>Add friends to start chatting!</p></div>';
+        return;
+    }
+    
+    const friendsData = await Promise.all(
+        currentUser.friends.map(friendId => getUserFromFirebase(friendId))
+    );
+    
+    container.innerHTML = friendsData.filter(f => f).map(friend => {
+        const chatId = getChatId(currentUser.id, friend.id);
+        return `
+            <div class="chat-list-item" onclick="openChat('${friend.id}', '${friend.username}')">
+                <div class="chat-list-avatar">${friend.username.charAt(0).toUpperCase()}</div>
+                <div class="chat-list-info">
+                    <div class="chat-list-name">${friend.username}</div>
+                    <div class="chat-list-preview">Click to chat</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function getChatId(userId1, userId2) {
+    // Always create chat ID in alphabetical order to ensure same chat room
+    return [userId1, userId2].sort().join('_');
+}
+
+async function openChat(friendId, friendName) {
+    currentChatFriend = friendId;
+    
+    // Update UI
+    document.getElementById('chatEmptyState').style.display = 'none';
+    document.getElementById('chatWindow').style.display = 'flex';
+    
+    // Update header
+    document.getElementById('chatAvatar').textContent = friendName.charAt(0).toUpperCase();
+    document.getElementById('chatUsername').textContent = friendName;
+    
+    // Highlight active chat
+    document.querySelectorAll('.chat-list-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    event.target.closest('.chat-list-item').classList.add('active');
+    
+    // Load messages
+    loadChatMessages(friendId);
+}
+
+async function loadChatMessages(friendId) {
+    const chatId = getChatId(currentUser.id, friendId);
+    const messagesRef = window.dbRef(window.db, 'chats/' + chatId + '/messages');
+    
+    // Clean up old listener
+    if (chatListener) {
+        chatListener();
+    }
+    
+    // Listen for new messages in real-time
+    chatListener = window.dbOnValue(messagesRef, (snapshot) => {
+        const messagesContainer = document.getElementById('chatMessages');
+        messagesContainer.innerHTML = '';
+        
+        if (snapshot.exists()) {
+            const messages = [];
+            snapshot.forEach((childSnapshot) => {
+                messages.push({
+                    id: childSnapshot.key,
+                    ...childSnapshot.val()
+                });
+            });
+            
+            // Sort by timestamp
+            messages.sort((a, b) => a.timestamp - b.timestamp);
+            
+            // Render messages
+            messages.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `chat-message ${msg.senderId === currentUser.id ? 'sent' : 'received'}`;
+                
+                const time = new Date(msg.timestamp).toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+                
+                messageDiv.innerHTML = `
+                    <div class="message-bubble">
+                        <p class="message-text">${escapeHtml(msg.text)}</p>
+                        <div class="message-time">${time}</div>
+                    </div>
+                `;
+                
+                messagesContainer.appendChild(messageDiv);
+            });
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    });
+}
+
+async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    
+    if (!text || !currentChatFriend) return;
+    
+    const chatId = getChatId(currentUser.id, currentChatFriend);
+    const messagesRef = window.dbRef(window.db, 'chats/' + chatId + '/messages');
+    
+    const newMessageRef = window.dbRef(window.db, 'chats/' + chatId + '/messages/' + Date.now());
+    
+    const message = {
+        text: text,
+        senderId: currentUser.id,
+        senderName: currentUser.username,
+        timestamp: Date.now()
+    };
+    
+    try {
+        await window.dbSet(newMessageRef, message);
+        input.value = '';
+        input.focus();
+    } catch (error) {
+        console.error('Error sending message:', error);
+        showToast('Failed to send message', 'error');
+    }
+}
+
+function handleChatKeyPress(event) {
+    if (event.key === 'Enter') {
+        sendMessage();
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
