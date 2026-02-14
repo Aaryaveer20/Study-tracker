@@ -2,15 +2,31 @@
 let currentUser = null;
 let currentChapterId = null;
 let currentChartView = 'day';
+let firebaseInitialized = false;
 
-// Initialize
-document.addEventListener('DOMContentLoaded', function() {
+// Wait for Firebase to be ready
+window.addEventListener('firebaseReady', function() {
+    firebaseInitialized = true;
+    console.log('✅ Firebase is ready!');
+    initializeApp();
+});
+
+// Fallback: Check if Firebase is already ready
+setTimeout(function() {
+    if (window.firebaseReady && !firebaseInitialized) {
+        firebaseInitialized = true;
+        initializeApp();
+    }
+}, 1000);
+
+// Initialize app
+function initializeApp() {
     const savedUserId = localStorage.getItem('currentUserId');
     if (savedUserId) {
         loadUserFromFirebase(savedUserId);
     }
     generateUserId();
-});
+}
 
 // Generate unique user ID
 function generateUserId() {
@@ -20,16 +36,29 @@ function generateUserId() {
 
 // Firebase Operations
 async function saveUserToFirebase(user) {
+    if (!window.firebaseReady) {
+        showToast('Firebase not ready. Please wait...', 'error');
+        return false;
+    }
+    
     try {
         const userRef = window.dbRef(window.db, 'users/' + user.id);
         await window.dbSet(userRef, user);
+        console.log('✅ User saved to Firebase');
+        return true;
     } catch (error) {
-        console.error('Error saving user:', error);
-        showToast('Error saving data. Please check your Firebase configuration.', 'error');
+        console.error('❌ Error saving user:', error);
+        showToast('Error saving data: ' + error.message, 'error');
+        return false;
     }
 }
 
 async function loadUserFromFirebase(userId) {
+    if (!window.firebaseReady) {
+        showToast('Firebase not ready. Please refresh the page.', 'error');
+        return;
+    }
+    
     try {
         const userRef = window.dbRef(window.db, 'users/' + userId);
         const snapshot = await window.dbGet(userRef);
@@ -43,13 +72,17 @@ async function loadUserFromFirebase(userId) {
             logout();
         }
     } catch (error) {
-        console.error('Error loading user:', error);
-        showToast('Error loading data. Please check your connection.', 'error');
+        console.error('❌ Error loading user:', error);
+        showToast('Error loading data: ' + error.message, 'error');
         logout();
     }
 }
 
 async function getUserFromFirebase(userId) {
+    if (!window.firebaseReady) {
+        return null;
+    }
+    
     try {
         const userRef = window.dbRef(window.db, 'users/' + userId);
         const snapshot = await window.dbGet(userRef);
@@ -59,21 +92,28 @@ async function getUserFromFirebase(userId) {
         }
         return null;
     } catch (error) {
-        console.error('Error getting user:', error);
+        console.error('❌ Error getting user:', error);
         return null;
     }
 }
 
 async function updateUserInFirebase(updates) {
+    if (!window.firebaseReady) {
+        showToast('Firebase not ready. Please wait...', 'error');
+        return false;
+    }
+    
     try {
         const userRef = window.dbRef(window.db, 'users/' + currentUser.id);
         await window.dbUpdate(userRef, updates);
         
         // Update local copy
         Object.assign(currentUser, updates);
+        return true;
     } catch (error) {
-        console.error('Error updating user:', error);
-        showToast('Error updating data. Please try again.', 'error');
+        console.error('❌ Error updating user:', error);
+        showToast('Error updating data: ' + error.message, 'error');
+        return false;
     }
 }
 
@@ -81,39 +121,58 @@ async function updateUserInFirebase(updates) {
 async function login() {
     const username = document.getElementById('usernameInput').value.trim();
     const userId = document.getElementById('userIdInput').value;
+    const statusMsg = document.getElementById('statusMessage');
     
     if (!username) {
         showToast('Please enter a username', 'error');
         return;
     }
     
-    // Check if user exists in Firebase
-    const existingUser = await getUserFromFirebase(userId);
-    
-    if (existingUser) {
-        currentUser = existingUser;
-        showToast('Welcome back, ' + username + '!', 'success');
-    } else {
-        // Create new user
-        currentUser = {
-            id: userId,
-            username: username,
-            points: 0,
-            chapters: [],
-            friends: [],
-            pointsHistory: {
-                daily: {},
-                weekly: {},
-                monthly: {}
-            }
-        };
-        
-        await saveUserToFirebase(currentUser);
-        showToast('Account created! Welcome, ' + username + '!', 'success');
+    if (!window.firebaseReady) {
+        statusMsg.textContent = 'Connecting to Firebase... Please wait.';
+        setTimeout(login, 1000);
+        return;
     }
     
-    localStorage.setItem('currentUserId', userId);
-    showDashboard();
+    statusMsg.textContent = 'Logging in...';
+    
+    try {
+        // Check if user exists in Firebase
+        const existingUser = await getUserFromFirebase(userId);
+        
+        if (existingUser) {
+            currentUser = existingUser;
+            showToast('Welcome back, ' + username + '!', 'success');
+        } else {
+            // Create new user
+            currentUser = {
+                id: userId,
+                username: username,
+                points: 0,
+                chapters: [],
+                friends: [],
+                pointsHistory: {
+                    daily: {},
+                    weekly: {},
+                    monthly: {}
+                }
+            };
+            
+            const saved = await saveUserToFirebase(currentUser);
+            if (!saved) {
+                statusMsg.textContent = 'Failed to create account. Please try again.';
+                return;
+            }
+            showToast('Account created! Welcome, ' + username + '!', 'success');
+        }
+        
+        localStorage.setItem('currentUserId', userId);
+        statusMsg.textContent = '';
+        showDashboard();
+    } catch (error) {
+        console.error('❌ Login error:', error);
+        statusMsg.textContent = 'Login failed: ' + error.message;
+    }
 }
 
 function logout() {
@@ -122,6 +181,7 @@ function logout() {
     document.getElementById('authScreen').classList.add('active');
     document.getElementById('dashboardScreen').classList.remove('active');
     document.getElementById('usernameInput').value = '';
+    document.getElementById('statusMessage').textContent = '';
     generateUserId();
 }
 
@@ -143,6 +203,8 @@ function showDashboard() {
 }
 
 function setupUserListener() {
+    if (!window.firebaseReady) return;
+    
     const userRef = window.dbRef(window.db, 'users/' + currentUser.id);
     window.dbOnValue(userRef, (snapshot) => {
         if (snapshot.exists()) {
@@ -221,12 +283,14 @@ async function addChapter() {
     };
     
     currentUser.chapters.push(chapter);
-    await saveUserToFirebase(currentUser);
+    const saved = await saveUserToFirebase(currentUser);
     
-    closeAddChapterModal();
-    renderChapters();
-    renderStats();
-    showToast('Chapter added successfully!', 'success');
+    if (saved) {
+        closeAddChapterModal();
+        renderChapters();
+        renderStats();
+        showToast('Chapter added successfully!', 'success');
+    }
 }
 
 function renderChapters() {
@@ -318,14 +382,16 @@ async function completeChapter(chapterId) {
         }
         currentUser.pointsHistory.monthly[month] += chapter.points;
         
-        await saveUserToFirebase(currentUser);
+        const saved = await saveUserToFirebase(currentUser);
         
-        document.getElementById('navPoints').textContent = currentUser.points + ' pts';
-        renderChapters();
-        renderLeaderboard();
-        renderStats();
-        
-        showToast('🎉 Congratulations! You earned ' + chapter.points + ' points!', 'success');
+        if (saved) {
+            document.getElementById('navPoints').textContent = currentUser.points + ' pts';
+            renderChapters();
+            renderLeaderboard();
+            renderStats();
+            
+            showToast('🎉 Congratulations! You earned ' + chapter.points + ' points!', 'success');
+        }
     }
 }
 
@@ -370,12 +436,14 @@ async function addFriend() {
     }
     
     currentUser.friends.push(friendId);
-    await saveUserToFirebase(currentUser);
+    const saved = await saveUserToFirebase(currentUser);
     
-    closeAddFriendModal();
-    renderFriends();
-    renderLeaderboard();
-    showToast('Friend added successfully!', 'success');
+    if (saved) {
+        closeAddFriendModal();
+        renderFriends();
+        renderLeaderboard();
+        showToast('Friend added successfully!', 'success');
+    }
 }
 
 async function renderFriends() {
