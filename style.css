@@ -704,11 +704,21 @@ body {
 }
 
 .message-bubble {
-    max-width: 60%;
+    max-width: 55%;
     padding: 12px 16px;
     border-radius: 18px;
     word-wrap: break-word;
     position: relative;
+}
+
+.chat-message.sent {
+    justify-content: flex-end;
+    padding-right: 45px; /* Make room for three dots */
+}
+
+.chat-message.received {
+    justify-content: flex-start;
+    padding-left: 45px; /* Make room for three dots */
 }
 
 .chat-message.sent .message-bubble {
@@ -732,11 +742,11 @@ body {
 }
 
 .chat-message.sent .message-actions {
-    right: -35px;
+    right: 5px;
 }
 
 .chat-message.received .message-actions {
-    left: -35px;
+    left: 5px;
 }
 
 .message-delete-btn {
@@ -778,11 +788,11 @@ body {
 }
 
 .chat-message.sent .delete-options {
-    right: -35px;
+    right: 5px;
 }
 
 .chat-message.received .delete-options {
-    left: -35px;
+    left: 5px;
 }
 
 @keyframes fadeIn {
@@ -1238,7 +1248,15 @@ body {
     }
     
     .message-bubble {
-        max-width: 80%;
+        max-width: 70%;
+    }
+    
+    .chat-message.sent {
+        padding-right: 40px;
+    }
+    
+    .chat-message.received {
+        padding-left: 40px;
     }
 }
 .empty-state{
