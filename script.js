@@ -812,12 +812,7 @@ function getChatId(userId1, userId2) {
 async function openChat(friendId, friendName) {
     currentChatFriend = friendId;
     
-    // Clear unread messages for this friend
-    if (unreadMessages[friendId]) {
-        unreadMessages[friendId] = 0;
-        updateNotificationBadge();
-        loadChatList(); // Refresh to remove unread indicator
-    }
+    console.log(`💬 Opening chat with ${friendName} (${friendId})`);
     
     // Update UI
     document.getElementById('chatEmptyState').style.display = 'none';
@@ -833,7 +828,11 @@ async function openChat(friendId, friendName) {
     });
     event.target.closest('.chat-list-item').classList.add('active');
     
-    // Load messages
+    // Clear unread for this friend immediately
+    unreadMessages[friendId] = 0;
+    updateNotificationBadge();
+    
+    // Load messages (this will also mark them as seen)
     loadChatMessages(friendId);
 }
 
@@ -886,6 +885,7 @@ async function loadChatMessages(friendId) {
                     minute: '2-digit' 
                 });
                 
+                // Show delete options for all messages, but different options based on sender
                 const deleteOptions = isSent ? `
                     <div class="message-actions">
                         <button class="message-delete-btn" onclick="showDeleteOptions('${msg.id}')" title="Delete message">
@@ -896,14 +896,28 @@ async function loadChatMessages(friendId) {
                         <button onclick="deleteMessageForMe('${chatId}', '${msg.id}')" class="delete-option">
                             🗑️ Delete for me
                         </button>
-                        <button onclick="deleteMessageForEveryone('${chatId}', '${msg.id}')" class="delete-option">
+                        <button onclick="deleteMessageForEveryone('${chatId}', '${msg.id}')" class="delete-option delete-everyone">
                             ❌ Delete for everyone
                         </button>
                         <button onclick="hideDeleteOptions('${msg.id}')" class="delete-option-cancel">
                             Cancel
                         </button>
                     </div>
-                ` : '';
+                ` : `
+                    <div class="message-actions">
+                        <button class="message-delete-btn" onclick="showDeleteOptions('${msg.id}')" title="Delete message">
+                            <span>⋮</span>
+                        </button>
+                    </div>
+                    <div class="delete-options" id="deleteOptions_${msg.id}" style="display: none;">
+                        <button onclick="deleteMessageForMe('${chatId}', '${msg.id}')" class="delete-option">
+                            🗑️ Delete for me
+                        </button>
+                        <button onclick="hideDeleteOptions('${msg.id}')" class="delete-option-cancel">
+                            Cancel
+                        </button>
+                    </div>
+                `;
                 
                 messageDiv.innerHTML = `
                     <div class="message-bubble">
@@ -1002,6 +1016,9 @@ function showDeleteOptions(messageId) {
     if (deleteOptions) {
         deleteOptions.style.display = 'block';
     }
+    
+    // Prevent event from bubbling
+    event.stopPropagation();
 }
 
 function hideDeleteOptions(messageId) {
@@ -1010,6 +1027,15 @@ function hideDeleteOptions(messageId) {
         deleteOptions.style.display = 'none';
     }
 }
+
+// Close delete options when clicking anywhere else
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.message-delete-btn') && !e.target.closest('.delete-options')) {
+        document.querySelectorAll('.delete-options').forEach(opt => {
+            opt.style.display = 'none';
+        });
+    }
+});
 
 async function deleteMessageForMe(chatId, messageId) {
     try {
@@ -1059,17 +1085,20 @@ async function markMessagesAsSeen(friendId) {
         currentUser.seenMessages = {};
     }
     
-    currentUser.seenMessages[chatId] = Date.now();
+    const now = Date.now();
+    currentUser.seenMessages[chatId] = now;
+    
+    console.log(`👀 Marking messages as seen for friend ${friendId} at ${now}`);
     
     // Save to Firebase
     try {
         await saveUserToFirebase(currentUser);
         
         // Clear unread count for this friend
-        if (unreadMessages[friendId]) {
-            unreadMessages[friendId] = 0;
-            updateNotificationBadge();
-        }
+        unreadMessages[friendId] = 0;
+        updateNotificationBadge();
+        
+        console.log('✅ Messages marked as seen and saved to Firebase');
     } catch (error) {
         console.error('Error marking messages as seen:', error);
     }
@@ -1086,6 +1115,8 @@ function startNotificationMonitoring() {
         currentUser.seenMessages = {};
     }
     
+    console.log('🔔 Starting notification monitoring for', currentUser.friends.length, 'friends');
+    
     // Monitor all chats for new messages
     currentUser.friends.forEach(friendId => {
         const chatId = getChatId(currentUser.id, friendId);
@@ -1096,17 +1127,25 @@ function startNotificationMonitoring() {
                 let unseenCount = 0;
                 const lastSeenTime = currentUser.seenMessages[chatId] || 0;
                 
+                console.log(`📩 Checking messages for friend ${friendId}, last seen: ${lastSeenTime}`);
+                
                 snapshot.forEach((childSnapshot) => {
                     const msg = childSnapshot.val();
                     
-                    // Count unseen messages from friend (not sent by current user)
-                    if (msg.senderId === friendId && msg.timestamp > lastSeenTime) {
-                        // Only count if we're not currently viewing this chat
-                        if (currentChatFriend !== friendId) {
-                            unseenCount++;
+                    // Only count messages FROM the friend (not sent by current user)
+                    if (msg.senderId === friendId) {
+                        // Check if message is newer than last seen time
+                        if (msg.timestamp > lastSeenTime) {
+                            // Only count if we're not currently viewing this chat
+                            if (currentChatFriend !== friendId) {
+                                unseenCount++;
+                                console.log(`  📬 Unseen message from ${msg.senderName}: "${msg.text}"`);
+                            }
                         }
                     }
                 });
+                
+                console.log(`  Total unseen from ${friendId}: ${unseenCount}`);
                 
                 // Update unseen count for this friend
                 unreadMessages[friendId] = unseenCount;
@@ -1125,11 +1164,15 @@ function updateNotificationBadge() {
         totalUnseen += unreadMessages[friendId];
     }
     
+    console.log('🔔 Total unseen messages:', totalUnseen);
+    
     // Show or hide badge
     if (totalUnseen > 0) {
         badge.style.display = 'block';
+        console.log('✅ Showing notification badge');
     } else {
         badge.style.display = 'none';
+        console.log('❌ Hiding notification badge');
     }
     
     // Update chat list if it's visible
