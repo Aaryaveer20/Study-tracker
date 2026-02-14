@@ -250,7 +250,7 @@
     <script type="module">
         // Import Firebase modules
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-        import { getDatabase, ref, set, get, update, onValue } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+        import { getDatabase, ref, set, get, update, onValue, push } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
 
         // Firebase configuration
         const firebaseConfig = {
@@ -275,6 +275,7 @@
             window.dbGet = get;
             window.dbUpdate = update;
             window.dbOnValue = onValue;
+            window.dbPush = push;
             window.firebaseReady = true;
             
             console.log('✅ Firebase initialized successfully!');
