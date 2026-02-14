@@ -1,15 +1,13 @@
 // Data Storage
 let currentUser = null;
-let users = JSON.parse(localStorage.getItem('studyTrackerUsers')) || {};
 let currentChapterId = null;
 let currentChartView = 'day';
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-        currentUser = JSON.parse(savedUser);
-        showDashboard();
+    const savedUserId = localStorage.getItem('currentUserId');
+    if (savedUserId) {
+        loadUserFromFirebase(savedUserId);
     }
     generateUserId();
 });
@@ -20,8 +18,67 @@ function generateUserId() {
     document.getElementById('userIdInput').value = id;
 }
 
+// Firebase Operations
+async function saveUserToFirebase(user) {
+    try {
+        const userRef = window.dbRef(window.db, 'users/' + user.id);
+        await window.dbSet(userRef, user);
+    } catch (error) {
+        console.error('Error saving user:', error);
+        showToast('Error saving data. Please check your Firebase configuration.', 'error');
+    }
+}
+
+async function loadUserFromFirebase(userId) {
+    try {
+        const userRef = window.dbRef(window.db, 'users/' + userId);
+        const snapshot = await window.dbGet(userRef);
+        
+        if (snapshot.exists()) {
+            currentUser = snapshot.val();
+            localStorage.setItem('currentUserId', userId);
+            showDashboard();
+        } else {
+            localStorage.removeItem('currentUserId');
+            logout();
+        }
+    } catch (error) {
+        console.error('Error loading user:', error);
+        showToast('Error loading data. Please check your connection.', 'error');
+        logout();
+    }
+}
+
+async function getUserFromFirebase(userId) {
+    try {
+        const userRef = window.dbRef(window.db, 'users/' + userId);
+        const snapshot = await window.dbGet(userRef);
+        
+        if (snapshot.exists()) {
+            return snapshot.val();
+        }
+        return null;
+    } catch (error) {
+        console.error('Error getting user:', error);
+        return null;
+    }
+}
+
+async function updateUserInFirebase(updates) {
+    try {
+        const userRef = window.dbRef(window.db, 'users/' + currentUser.id);
+        await window.dbUpdate(userRef, updates);
+        
+        // Update local copy
+        Object.assign(currentUser, updates);
+    } catch (error) {
+        console.error('Error updating user:', error);
+        showToast('Error updating data. Please try again.', 'error');
+    }
+}
+
 // Authentication
-function login() {
+async function login() {
     const username = document.getElementById('usernameInput').value.trim();
     const userId = document.getElementById('userIdInput').value;
     
@@ -30,9 +87,12 @@ function login() {
         return;
     }
     
-    // Check if user exists
-    if (users[userId]) {
-        currentUser = users[userId];
+    // Check if user exists in Firebase
+    const existingUser = await getUserFromFirebase(userId);
+    
+    if (existingUser) {
+        currentUser = existingUser;
+        showToast('Welcome back, ' + username + '!', 'success');
     } else {
         // Create new user
         currentUser = {
@@ -47,17 +107,17 @@ function login() {
                 monthly: {}
             }
         };
-        users[userId] = currentUser;
-        saveUsers();
+        
+        await saveUserToFirebase(currentUser);
+        showToast('Account created! Welcome, ' + username + '!', 'success');
     }
     
-    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    localStorage.setItem('currentUserId', userId);
     showDashboard();
-    showToast('Welcome, ' + username + '!', 'success');
 }
 
 function logout() {
-    localStorage.removeItem('currentUser');
+    localStorage.removeItem('currentUserId');
     currentUser = null;
     document.getElementById('authScreen').classList.add('active');
     document.getElementById('dashboardScreen').classList.remove('active');
@@ -77,17 +137,26 @@ function showDashboard() {
     renderFriends();
     renderLeaderboard();
     renderStats();
+    
+    // Setup real-time listener for current user updates
+    setupUserListener();
 }
 
-// Save data
-function saveUsers() {
-    localStorage.setItem('studyTrackerUsers', JSON.stringify(users));
-}
-
-function updateCurrentUser() {
-    users[currentUser.id] = currentUser;
-    localStorage.setItem('currentUser', JSON.stringify(currentUser));
-    saveUsers();
+function setupUserListener() {
+    const userRef = window.dbRef(window.db, 'users/' + currentUser.id);
+    window.dbOnValue(userRef, (snapshot) => {
+        if (snapshot.exists()) {
+            const updatedUser = snapshot.val();
+            currentUser = updatedUser;
+            
+            // Update UI
+            document.getElementById('navPoints').textContent = currentUser.points + ' pts';
+            renderChapters();
+            renderFriends();
+            renderLeaderboard();
+            renderStats();
+        }
+    });
 }
 
 // Navigation
@@ -133,7 +202,7 @@ function closeAddChapterModal() {
     document.getElementById('chapterDescription').value = '';
 }
 
-function addChapter() {
+async function addChapter() {
     const name = document.getElementById('chapterName').value.trim();
     const description = document.getElementById('chapterDescription').value.trim();
     
@@ -152,7 +221,8 @@ function addChapter() {
     };
     
     currentUser.chapters.push(chapter);
-    updateCurrentUser();
+    await saveUserToFirebase(currentUser);
+    
     closeAddChapterModal();
     renderChapters();
     renderStats();
@@ -162,7 +232,7 @@ function addChapter() {
 function renderChapters() {
     const grid = document.getElementById('chaptersGrid');
     
-    if (currentUser.chapters.length === 0) {
+    if (!currentUser.chapters || currentUser.chapters.length === 0) {
         grid.innerHTML = '<div class="empty-state"><p>📚 No chapters yet. Add your first chapter to start earning points!</p></div>';
         return;
     }
@@ -219,7 +289,7 @@ function submitQuiz() {
     closeQuizModal();
 }
 
-function completeChapter(chapterId) {
+async function completeChapter(chapterId) {
     const chapter = currentUser.chapters.find(c => c.id === chapterId);
     
     if (chapter && !chapter.completed) {
@@ -248,7 +318,7 @@ function completeChapter(chapterId) {
         }
         currentUser.pointsHistory.monthly[month] += chapter.points;
         
-        updateCurrentUser();
+        await saveUserToFirebase(currentUser);
         
         document.getElementById('navPoints').textContent = currentUser.points + ' pts';
         renderChapters();
@@ -269,7 +339,7 @@ function closeAddFriendModal() {
     document.getElementById('friendId').value = '';
 }
 
-function addFriend() {
+async function addFriend() {
     const friendId = document.getElementById('friendId').value.trim().toUpperCase();
     
     if (!friendId) {
@@ -282,63 +352,72 @@ function addFriend() {
         return;
     }
     
-    if (currentUser.friends.includes(friendId)) {
+    if (currentUser.friends && currentUser.friends.includes(friendId)) {
         showToast('This friend is already added', 'error');
         return;
     }
     
-    if (!users[friendId]) {
+    // Check if user exists in Firebase
+    const friend = await getUserFromFirebase(friendId);
+    
+    if (!friend) {
         showToast('User not found with this ID', 'error');
         return;
     }
     
+    if (!currentUser.friends) {
+        currentUser.friends = [];
+    }
+    
     currentUser.friends.push(friendId);
-    updateCurrentUser();
+    await saveUserToFirebase(currentUser);
+    
     closeAddFriendModal();
     renderFriends();
     renderLeaderboard();
     showToast('Friend added successfully!', 'success');
 }
 
-function renderFriends() {
+async function renderFriends() {
     const container = document.getElementById('friendsList');
     
-    if (currentUser.friends.length === 0) {
+    if (!currentUser.friends || currentUser.friends.length === 0) {
         container.innerHTML = '<div class="empty-state"><p>👥 No friends added yet. Add friends to compete!</p></div>';
         return;
     }
     
-    container.innerHTML = currentUser.friends.map(friendId => {
-        const friend = users[friendId];
-        if (!friend) return '';
-        
-        return `
-            <div class="friend-card">
-                <div class="friend-info">
-                    <div class="friend-avatar">${friend.username.charAt(0).toUpperCase()}</div>
-                    <div class="friend-details">
-                        <h3>${friend.username}</h3>
-                        <p>ID: ${friend.id}</p>
-                    </div>
+    // Fetch all friends data
+    const friendsData = await Promise.all(
+        currentUser.friends.map(friendId => getUserFromFirebase(friendId))
+    );
+    
+    container.innerHTML = friendsData.filter(friend => friend !== null).map(friend => `
+        <div class="friend-card">
+            <div class="friend-info">
+                <div class="friend-avatar">${friend.username.charAt(0).toUpperCase()}</div>
+                <div class="friend-details">
+                    <h3>${friend.username}</h3>
+                    <p>ID: ${friend.id}</p>
                 </div>
-                <div class="friend-points">${friend.points} pts</div>
             </div>
-        `;
-    }).join('');
+            <div class="friend-points">${friend.points} pts</div>
+        </div>
+    `).join('');
 }
 
 // Leaderboard
-function renderLeaderboard() {
+async function renderLeaderboard() {
     const container = document.getElementById('leaderboard');
     
     // Create array of all users (current user + friends)
     const leaderboardUsers = [currentUser];
-    currentUser.friends.forEach(friendId => {
-        const friend = users[friendId];
-        if (friend) {
-            leaderboardUsers.push(friend);
-        }
-    });
+    
+    if (currentUser.friends && currentUser.friends.length > 0) {
+        const friendsData = await Promise.all(
+            currentUser.friends.map(friendId => getUserFromFirebase(friendId))
+        );
+        leaderboardUsers.push(...friendsData.filter(friend => friend !== null));
+    }
     
     // Sort by points
     leaderboardUsers.sort((a, b) => b.points - a.points);
@@ -370,9 +449,9 @@ function renderLeaderboard() {
 
 // Statistics
 function renderStats() {
-    const totalChapters = currentUser.chapters.length;
-    const completedChapters = currentUser.chapters.filter(c => c.completed).length;
-    const totalPoints = currentUser.points;
+    const totalChapters = currentUser.chapters ? currentUser.chapters.length : 0;
+    const completedChapters = currentUser.chapters ? currentUser.chapters.filter(c => c.completed).length : 0;
+    const totalPoints = currentUser.points || 0;
     
     document.getElementById('totalChapters').textContent = totalChapters;
     document.getElementById('completedChapters').textContent = completedChapters;
@@ -405,6 +484,8 @@ function renderChart(view) {
     let labels = [];
     let data = [];
     
+    const pointsHistory = currentUser.pointsHistory || { daily: {}, weekly: {}, monthly: {} };
+    
     if (view === 'day') {
         // Last 7 days
         for (let i = 6; i >= 0; i--) {
@@ -412,7 +493,7 @@ function renderChart(view) {
             date.setDate(date.getDate() - i);
             const dateStr = date.toISOString().split('T')[0];
             labels.push(date.toLocaleDateString('en-US', { weekday: 'short' }));
-            data.push(currentUser.pointsHistory.daily[dateStr] || 0);
+            data.push(pointsHistory.daily[dateStr] || 0);
         }
     } else if (view === 'week') {
         // Last 4 weeks
@@ -421,7 +502,7 @@ function renderChart(view) {
             date.setDate(date.getDate() - (i * 7));
             const week = getWeekNumber(date);
             labels.push('Week ' + week);
-            data.push(currentUser.pointsHistory.weekly[week] || 0);
+            data.push(pointsHistory.weekly[week] || 0);
         }
     } else if (view === 'month') {
         // Last 6 months
@@ -430,7 +511,7 @@ function renderChart(view) {
             date.setMonth(date.getMonth() - i);
             const monthStr = date.toISOString().slice(0, 7);
             labels.push(date.toLocaleDateString('en-US', { month: 'short' }));
-            data.push(currentUser.pointsHistory.monthly[monthStr] || 0);
+            data.push(pointsHistory.monthly[monthStr] || 0);
         }
     }
     
