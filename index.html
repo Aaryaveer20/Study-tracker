@@ -14,11 +14,25 @@
             <h1>📚 Study Tracker</h1>
             <p class="tagline">Compete with friends while you learn!</p>
             
-            <div class="auth-form">
-                <input type="text" id="usernameInput" placeholder="Enter your username" />
-                <input type="text" id="userIdInput" placeholder="Your unique ID (auto-generated)" readonly />
-                <button onclick="login()" class="btn-primary">Start Learning</button>
+            <!-- Auth Tabs -->
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="switchAuthTab('signup')">Sign Up</button>
+                <button class="auth-tab" onclick="switchAuthTab('login')">Log In</button>
             </div>
+            
+            <!-- Sign Up Form -->
+            <div id="signupForm" class="auth-form active">
+                <input type="text" id="signupUsername" placeholder="Enter your username" />
+                <input type="text" id="signupUserId" placeholder="Your unique ID (auto-generated)" readonly />
+                <button onclick="signUp()" class="btn-primary">Create Account</button>
+            </div>
+            
+            <!-- Log In Form -->
+            <div id="loginForm" class="auth-form" style="display: none;">
+                <input type="text" id="loginUserId" placeholder="Enter your ID (e.g., ST5X7ABC)" />
+                <button onclick="logIn()" class="btn-primary">Log In</button>
+            </div>
+            
             <p id="statusMessage" style="color: red; margin-top: 10px; font-size: 14px;"></p>
         </div>
     </div>
@@ -117,6 +131,10 @@
                                 <div class="chat-messages" id="chatMessages">
                                 </div>
                                 <div class="chat-input-container">
+                                    <input type="file" id="imageInput" accept="image/*" style="display: none;" onchange="handleImageSelect(event)" />
+                                    <button onclick="document.getElementById('imageInput').click()" class="btn-image" title="Send image">
+                                        <span>📷</span>
+                                    </button>
                                     <input type="text" id="chatInput" placeholder="Type a message..." onkeypress="handleChatKeyPress(event)" />
                                     <button onclick="sendMessage()" class="btn-send">
                                         <span>📤</span>
