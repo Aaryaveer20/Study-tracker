@@ -522,7 +522,12 @@ async function renderFriends() {
                     <p>ID: ${friend.id}</p>
                 </div>
             </div>
-            <div class="friend-points">${friend.points} pts</div>
+            <div class="friend-actions">
+                <div class="friend-points">${friend.points} pts</div>
+                <button class="btn-view-chapters" onclick="viewFriendChapters('${friend.id}', '${friend.username}')">
+                    📖 View Chapters
+                </button>
+            </div>
         </div>
     `).join('');
 }
@@ -684,4 +689,74 @@ function showToast(message, type = 'success') {
     toast.textContent = message;
     toast.className = 'toast show ' + type;
     setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// Friend Chapters Viewing
+async function viewFriendChapters(friendId, friendName) {
+    const friend = await getUserFromFirebase(friendId);
+    
+    if (!friend) {
+        showToast('Unable to load friend data', 'error');
+        return;
+    }
+    
+    // Update modal title
+    document.getElementById('friendChaptersTitle').textContent = `${friendName}'s Chapters`;
+    
+    // Render chapters
+    const container = document.getElementById('friendChaptersContent');
+    
+    if (!friend.chapters || friend.chapters.length === 0) {
+        container.innerHTML = `
+            <div class="friend-chapters-empty">
+                <p>📚 ${friendName} hasn't added any chapters yet.</p>
+            </div>
+        `;
+    } else {
+        const completedChapters = friend.chapters.filter(c => c.completed);
+        const pendingChapters = friend.chapters.filter(c => !c.completed);
+        
+        let html = '';
+        
+        // Show completed chapters first
+        if (completedChapters.length > 0) {
+            html += '<h4 style="color: #2ecc71; margin-bottom: 15px;">✅ Completed Chapters (' + completedChapters.length + ')</h4>';
+            html += '<div class="friend-chapters-list">';
+            html += completedChapters.map(chapter => `
+                <div class="friend-chapter-item completed">
+                    <div class="friend-chapter-header">
+                        <span class="friend-chapter-name">${chapter.name}</span>
+                        <span class="friend-chapter-badge completed">✓ Completed</span>
+                    </div>
+                    ${chapter.description ? `<p class="friend-chapter-description">${chapter.description}</p>` : ''}
+                </div>
+            `).join('');
+            html += '</div>';
+        }
+        
+        // Show pending chapters
+        if (pendingChapters.length > 0) {
+            html += '<h4 style="color: #856404; margin: 20px 0 15px 0;">⏳ Pending Chapters (' + pendingChapters.length + ')</h4>';
+            html += '<div class="friend-chapters-list">';
+            html += pendingChapters.map(chapter => `
+                <div class="friend-chapter-item">
+                    <div class="friend-chapter-header">
+                        <span class="friend-chapter-name">${chapter.name}</span>
+                        <span class="friend-chapter-badge pending">⏳ Pending</span>
+                    </div>
+                    ${chapter.description ? `<p class="friend-chapter-description">${chapter.description}</p>` : ''}
+                </div>
+            `).join('');
+            html += '</div>';
+        }
+        
+        container.innerHTML = html;
+    }
+    
+    // Show modal
+    document.getElementById('friendChaptersModal').classList.add('active');
+}
+
+function closeFriendChaptersModal() {
+    document.getElementById('friendChaptersModal').classList.remove('active');
 }
