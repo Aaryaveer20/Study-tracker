@@ -44,8 +44,9 @@
                 <button class="menu-btn" onclick="showSection('friends')">
                     👥 Friends
                 </button>
-                <button class="menu-btn" onclick="showSection('chat')">
+                <button class="menu-btn" id="chatMenuBtn" onclick="showSection('chat')">
                     💬 Chat
+                    <span class="notification-badge" id="chatNotificationBadge" style="display: none;"></span>
                 </button>
                 <button class="menu-btn" onclick="showSection('leaderboard')">
                     🏆 Leaderboard
@@ -93,9 +94,7 @@
                                 <h3>💬 Chats</h3>
                             </div>
                             <div class="chat-list" id="chatList">
-                                <div class="empty-state">
-                                    <p>Select a friend to start chatting!</p>
-                                </div>
+                                <!-- Friends will be loaded here -->
                             </div>
                         </div>
                         <div class="chat-main">
