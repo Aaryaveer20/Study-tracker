@@ -90,10 +90,22 @@ body {
 
 .auth-form {
     display: none;
+    animation: fadeIn 0.3s ease-in;
 }
 
 .auth-form.active {
     display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .auth-form input {
@@ -104,6 +116,57 @@ body {
     border-radius: 10px;
     font-size: 16px;
     transition: border-color 0.3s;
+}
+
+.id-display-box {
+    background: #f8f9ff;
+    border: 2px dashed #667eea;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.id-display-box label {
+    display: block;
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.id-display-box input {
+    margin-bottom: 8px;
+    background: white;
+    font-weight: 700;
+    color: #667eea;
+    font-size: 18px;
+    text-align: center;
+    letter-spacing: 2px;
+}
+
+.id-info {
+    font-size: 12px;
+    color: #667eea;
+    margin: 0;
+    text-align: center;
+    font-weight: 500;
+}
+
+.forgot-id {
+    text-align: center;
+    margin-top: 15px;
+    font-size: 14px;
+    color: #666;
+}
+
+.forgot-id a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.forgot-id a:hover {
+    text-decoration: underline;
 }
 
 .auth-form input:focus {
