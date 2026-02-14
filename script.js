@@ -255,11 +255,17 @@ function showSection(section) {
 
 // Chapters Management
 function openAddChapterModal() {
-    document.getElementById('addChapterModal').classList.add('active');
+    console.log('Opening add chapter modal...');
+    const modal = document.getElementById('addChapterModal');
+    modal.classList.add('active');
+    modal.style.display = 'flex';
 }
 
 function closeAddChapterModal() {
-    document.getElementById('addChapterModal').classList.remove('active');
+    console.log('Closing add chapter modal...');
+    const modal = document.getElementById('addChapterModal');
+    modal.classList.remove('active');
+    modal.style.display = 'none';
     document.getElementById('chapterName').value = '';
     document.getElementById('chapterDescription').value = '';
 }
@@ -267,6 +273,8 @@ function closeAddChapterModal() {
 async function addChapter() {
     const name = document.getElementById('chapterName').value.trim();
     const description = document.getElementById('chapterDescription').value.trim();
+    
+    console.log('Adding chapter:', name);
     
     if (!name) {
         showToast('Please enter a chapter name', 'error');
@@ -282,7 +290,13 @@ async function addChapter() {
         completedDate: null
     };
     
+    if (!currentUser.chapters) {
+        currentUser.chapters = [];
+    }
+    
     currentUser.chapters.push(chapter);
+    console.log('Chapter added to user:', chapter);
+    
     const saved = await saveUserToFirebase(currentUser);
     
     if (saved) {
@@ -290,6 +304,8 @@ async function addChapter() {
         renderChapters();
         renderStats();
         showToast('Chapter added successfully!', 'success');
+    } else {
+        showToast('Failed to add chapter. Please try again.', 'error');
     }
 }
 
@@ -304,12 +320,12 @@ function renderChapters() {
     grid.innerHTML = currentUser.chapters.map(chapter => `
         <div class="chapter-card ${chapter.completed ? 'completed' : ''}">
             <div class="chapter-header">
-                <div class="chapter-title">${chapter.name}</div>
+                <div class="chapter-title">${escapeHtml(chapter.name)}</div>
                 <div class="chapter-status ${chapter.completed ? 'completed' : 'pending'}">
                     ${chapter.completed ? '✓ Completed' : 'Pending'}
                 </div>
             </div>
-            ${chapter.description ? `<div class="chapter-description">${chapter.description}</div>` : ''}
+            ${chapter.description ? `<div class="chapter-description">${escapeHtml(chapter.description)}</div>` : ''}
             <div class="chapter-footer">
                 <div class="chapter-points">🏆 ${chapter.points} points</div>
                 <button class="btn-complete" 
@@ -325,11 +341,15 @@ function renderChapters() {
 // Quiz Modal
 function openQuizModal(chapterId) {
     currentChapterId = chapterId;
-    document.getElementById('quizModal').classList.add('active');
+    const modal = document.getElementById('quizModal');
+    modal.classList.add('active');
+    modal.style.display = 'flex';
 }
 
 function closeQuizModal() {
-    document.getElementById('quizModal').classList.remove('active');
+    const modal = document.getElementById('quizModal');
+    modal.classList.remove('active');
+    modal.style.display = 'none';
     document.querySelectorAll('input[name="completed"]').forEach(input => {
         input.checked = false;
     });
@@ -397,11 +417,15 @@ async function completeChapter(chapterId) {
 
 // Friends Management
 function openAddFriendModal() {
-    document.getElementById('addFriendModal').classList.add('active');
+    const modal = document.getElementById('addFriendModal');
+    modal.classList.add('active');
+    modal.style.display = 'flex';
 }
 
 function closeAddFriendModal() {
-    document.getElementById('addFriendModal').classList.remove('active');
+    const modal = document.getElementById('addFriendModal');
+    modal.classList.remove('active');
+    modal.style.display = 'none';
     document.getElementById('friendId').value = '';
 }
 
@@ -462,9 +486,9 @@ async function renderFriends() {
     container.innerHTML = friendsData.filter(friend => friend !== null).map(friend => `
         <div class="friend-card">
             <div class="friend-info">
-                <div class="friend-avatar">${friend.username.charAt(0).toUpperCase()}</div>
+                <div class="friend-avatar">${escapeHtml(friend.username.charAt(0).toUpperCase())}</div>
                 <div class="friend-details">
-                    <h3>${friend.username}</h3>
+                    <h3>${escapeHtml(friend.username)}</h3>
                     <p>ID: ${friend.id}</p>
                 </div>
             </div>
@@ -506,7 +530,7 @@ async function renderLeaderboard() {
                 <div class="leaderboard-left">
                     <div class="rank">${medal || rank}</div>
                     <div class="leaderboard-user">
-                        ${user.username} ${isCurrentUser ? '(You)' : ''}
+                        ${escapeHtml(user.username)} ${isCurrentUser ? '(You)' : ''}
                     </div>
                 </div>
                 <div class="leaderboard-points">${user.points} pts</div>
@@ -656,6 +680,12 @@ function getWeekNumber(date) {
     return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 }
 
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 function showToast(message, type = 'success') {
     const toast = document.getElementById('toast');
     toast.textContent = message;
@@ -665,3 +695,14 @@ function showToast(message, type = 'success') {
         toast.classList.remove('show');
     }, 3000);
 }
+
+// Close modals when clicking outside
+window.addEventListener('click', function(event) {
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        if (event.target === modal) {
+            modal.classList.remove('active');
+            modal.style.display = 'none';
+        }
+    });
+});
