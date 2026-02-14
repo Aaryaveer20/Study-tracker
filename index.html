@@ -43,6 +43,9 @@
                 <button class="menu-btn" onclick="showSection('friends')">
                     👥 Friends
                 </button>
+                <button class="menu-btn" onclick="showSection('chat')">
+                    💬 Chat
+                </button>
                 <button class="menu-btn" onclick="showSection('leaderboard')">
                     🏆 Leaderboard
                 </button>
@@ -81,6 +84,26 @@
                     </div>
                 </section>
 
+                <!-- Chat Section -->
+                <section id="chatSection" class="content-section">
+                    <div class="section-header">
+                        <h2>💬 Chat with Friends</h2>
+                    </div>
+
+                    <div class="chat-container">
+                        <div class="chat-friends-list" id="chatFriendsList">
+                            <div class="empty-state">
+                                <p>Add friends to start chatting!</p>
+                            </div>
+                        </div>
+                        <div class="chat-window" id="chatWindow">
+                            <div class="chat-placeholder">
+                                <p>Select a friend to start chatting</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Leaderboard Section -->
                 <section id="leaderboardSection" class="content-section">
                     <div class="section-header">
@@ -114,6 +137,10 @@
                                 <div class="stat-value" id="totalPoints">0</div>
                                 <div class="stat-label">Total Points</div>
                             </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="totalTimeSpent">0h</div>
+                                <div class="stat-label">Time Spent</div>
+                            </div>
                         </div>
 
                         <div class="chart-tabs">
@@ -142,6 +169,25 @@
                 <input type="text" id="chapterName" placeholder="Chapter name" />
                 <textarea id="chapterDescription" placeholder="Description (optional)" rows="3"></textarea>
                 <button onclick="addChapter()" class="btn-primary">Add Chapter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Study Timer Modal -->
+    <div id="timerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="timerChapterName">Study Timer</h3>
+                <span class="close" onclick="closeTimerModal()">&times;</span>
+            </div>
+            <div class="modal-body timer-body">
+                <div class="timer-display" id="timerDisplay">00:00:00</div>
+                <div class="timer-controls">
+                    <button onclick="startTimer()" class="btn-primary" id="startBtn">▶️ Start</button>
+                    <button onclick="pauseTimer()" class="btn-secondary" id="pauseBtn" disabled>⏸️ Pause</button>
+                    <button onclick="stopTimer()" class="btn-secondary" id="stopBtn" disabled>⏹️ Stop</button>
+                </div>
+                <p class="timer-info">Time will be saved when you stop the timer</p>
             </div>
         </div>
     </div>
@@ -191,7 +237,7 @@
     <script type="module">
         // Import Firebase modules
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-        import { getDatabase, ref, set, get, update, onValue } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+        import { getDatabase, ref, set, get, update, onValue, push } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
 
         // Firebase configuration
         const firebaseConfig = {
@@ -216,6 +262,7 @@
             window.dbGet = get;
             window.dbUpdate = update;
             window.dbOnValue = onValue;
+            window.dbPush = push;
             window.firebaseReady = true;
             
             console.log('✅ Firebase initialized successfully!');
