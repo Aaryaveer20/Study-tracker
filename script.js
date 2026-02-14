@@ -5,6 +5,7 @@ let currentChartView = 'day';
 let firebaseInitialized = false;
 let userListeners = {}; // Track active listeners
 let isSaving = false; // ⭐ NEW: Flag to prevent overwrites during save
+let pointsChartInstance = null;
 
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -246,9 +247,17 @@ function logout() {
 }
 
 function showDashboard() {
+    // Switch screens
     document.getElementById('authScreen').classList.remove('active');
     document.getElementById('dashboardScreen').classList.add('active');
     
+    // ⭐ FIX: Reset scroll position to the top
+    window.scrollTo({
+        top: 0,
+        behavior: 'smooth' // Optional: adds a nice smooth transition
+    });
+    
+    // Update user info
     document.getElementById('navUsername').textContent = currentUser.username;
     document.getElementById('navUserId').textContent = currentUser.id;
     updatePoints();
@@ -575,17 +584,13 @@ function switchChart(view) {
 }
 
 function renderChart(view) {
-    const canvas = document.getElementById('pointsChart');
-    const ctx = canvas.getContext('2d');
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
+    const ctx = document.getElementById('pointsChart').getContext('2d');
     
     let labels = [];
     let data = [];
     const history = currentUser.pointsHistory || { daily: {}, weekly: {}, monthly: {} };
     
+    // 1. Prepare Data
     if (view === 'day') {
         for (let i = 6; i >= 0; i--) {
             const date = new Date();
@@ -611,67 +616,61 @@ function renderChart(view) {
             data.push(history.monthly[monthStr] || 0);
         }
     }
-    
-    drawChart(ctx, canvas, labels, data);
-}
 
-function drawChart(ctx, canvas, labels, data) {
-    const padding = 50;
-    const chartWidth = canvas.width - padding * 2;
-    const chartHeight = canvas.height - padding * 2;
-    const maxValue = Math.max(...data, 10);
-    
-    // Axes
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(padding, padding);
-    ctx.lineTo(padding, canvas.height - padding);
-    ctx.lineTo(canvas.width - padding, canvas.height - padding);
-    ctx.stroke();
-    
-    // Bars
-    const barWidth = chartWidth / labels.length;
-    const barPadding = barWidth * 0.2;
-    
-    data.forEach((value, index) => {
-        const barHeight = (value / maxValue) * chartHeight;
-        const x = padding + (index * barWidth) + barPadding;
-        const y = canvas.height - padding - barHeight;
-        const width = barWidth - (barPadding * 2);
-        
-        const gradient = ctx.createLinearGradient(0, y, 0, canvas.height - padding);
-        gradient.addColorStop(0, '#667eea');
-        gradient.addColorStop(1, '#764ba2');
-        
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x, y, width, barHeight);
-        
-        ctx.fillStyle = '#333';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(value, x + width / 2, y - 5);
-    });
-    
-    // Labels
-    ctx.fillStyle = '#666';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    labels.forEach((label, index) => {
-        const x = padding + (index * barWidth) + (barWidth / 2);
-        const y = canvas.height - padding + 20;
-        ctx.fillText(label, x, y);
-    });
-    
-    // Y-axis
-    ctx.textAlign = 'right';
-    for (let i = 0; i <= 5; i++) {
-        const value = Math.round((maxValue / 5) * i);
-        const y = canvas.height - padding - ((chartHeight / 5) * i);
-        ctx.fillText(value, padding - 10, y + 5);
+    // 2. Destroy old chart if it exists
+    if (pointsChartInstance) {
+        pointsChartInstance.destroy();
     }
-}
 
+    // 3. Create shadcn-style Chart
+    pointsChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Points Earned',
+                data: data,
+                backgroundColor: '#2563eb', // shadcn primary blue
+                borderRadius: 6,           // Rounded bars
+                borderSkipped: false,
+                barPercentage: 0.6,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }, // Hide legend for cleaner look
+                tooltip: {
+                    backgroundColor: '#18181b', // Dark shadcn tooltip
+                    padding: 12,
+                    titleFont: { size: 14, weight: '600' },
+                    cornerRadius: 8
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false }, // Clean X-axis
+                    ticks: { color: '#71717a', font: { size: 12 } }
+                },
+                y: {
+                    beginAtZero: true,
+                    border: { display: false, dash: [4, 4] }, // Dashed grid lines
+                    grid: { color: '#e4e4e7' },
+                    ticks: { 
+                        color: '#71717a',
+                        font: { size: 12 },
+                        stepSize: 10 
+                    }
+                }
+            },
+            animation: {
+                duration: 1000,
+                easing: 'easeInOutQuart'
+            }
+        }
+    });
+}
 function getWeekNumber(date) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const dayNum = d.getUTCDay() || 7;
