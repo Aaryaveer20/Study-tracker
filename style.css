@@ -380,6 +380,91 @@ body {
     color: #667eea;
 }
 
+.btn-view-chapters {
+    padding: 8px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+    margin-left: 10px;
+}
+
+.btn-view-chapters:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.friend-chapters-list {
+    display: grid;
+    gap: 15px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.friend-chapter-item {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    border-left: 4px solid #667eea;
+}
+
+.friend-chapter-item.completed {
+    border-left-color: #2ecc71;
+    background: #f0fff4;
+}
+
+.friend-chapter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.friend-chapter-name {
+    font-weight: 600;
+    color: #333;
+    font-size: 1.1em;
+}
+
+.friend-chapter-badge {
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 0.85em;
+    font-weight: 600;
+}
+
+.friend-chapter-badge.completed {
+    background: #d4edda;
+    color: #155724;
+}
+
+.friend-chapter-badge.pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.friend-chapter-description {
+    color: #666;
+    font-size: 0.95em;
+    line-height: 1.4;
+}
+
+.friend-chapters-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #999;
+}
+
+.friend-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+
 /* Leaderboard */
 .leaderboard {
     background: white;
