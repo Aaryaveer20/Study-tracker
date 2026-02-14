@@ -3,6 +3,7 @@ let currentUser = null;
 let currentChapterId = null;
 let currentChartView = 'day';
 let firebaseInitialized = false;
+let userListeners = {}; // Track active listeners
 
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -59,6 +60,9 @@ async function loadUserFromFirebase(userId) {
             currentUser = snapshot.val();
             localStorage.setItem('currentUserId', userId);
             showDashboard();
+            
+            // ⭐ NEW: Start listening for real-time updates
+            setupRealtimeSync(userId);
         } else {
             localStorage.removeItem('currentUserId');
             logout();
@@ -67,6 +71,61 @@ async function loadUserFromFirebase(userId) {
         console.error('❌ Load error:', error);
         logout();
     }
+}
+
+// ⭐ NEW: Real-time sync for current user
+function setupRealtimeSync(userId) {
+    const userRef = window.dbRef(window.db, 'users/' + userId);
+    
+    // Listen for changes to the current user's data
+    window.dbOnValue(userRef, (snapshot) => {
+        if (snapshot.exists()) {
+            const updatedUser = snapshot.val();
+            
+            // Only update if data actually changed
+            if (JSON.stringify(updatedUser) !== JSON.stringify(currentUser)) {
+                console.log('🔄 User data updated from Firebase');
+                currentUser = updatedUser;
+                
+                // Update all UI elements
+                updatePoints();
+                renderChapters();
+                renderStats();
+                renderLeaderboard(); // This will also refresh friend data
+            }
+        }
+    });
+}
+
+// ⭐ NEW: Real-time sync for friends
+function setupFriendsRealtimeSync() {
+    // Clean up old listeners
+    if (userListeners.friends) {
+        userListeners.friends.forEach(unsubscribe => unsubscribe());
+        userListeners.friends = [];
+    }
+    
+    if (!currentUser.friends || currentUser.friends.length === 0) {
+        return;
+    }
+    
+    userListeners.friends = [];
+    
+    // Listen to each friend's data
+    currentUser.friends.forEach(friendId => {
+        const friendRef = window.dbRef(window.db, 'users/' + friendId);
+        
+        const unsubscribe = window.dbOnValue(friendRef, (snapshot) => {
+            if (snapshot.exists()) {
+                console.log('🔄 Friend data updated:', friendId);
+                // Refresh friends list and leaderboard
+                renderFriends();
+                renderLeaderboard();
+            }
+        });
+        
+        userListeners.friends.push(unsubscribe);
+    });
 }
 
 async function getUserFromFirebase(userId) {
@@ -115,6 +174,11 @@ async function login() {
         
         localStorage.setItem('currentUserId', userId);
         showDashboard();
+        
+        // ⭐ NEW: Start real-time sync after login
+        setupRealtimeSync(userId);
+        setupFriendsRealtimeSync();
+        
         showToast('Welcome, ' + username + '!', 'success');
     } catch (error) {
         console.error('Login error:', error);
@@ -123,6 +187,12 @@ async function login() {
 }
 
 function logout() {
+    // Clean up listeners
+    if (userListeners.friends) {
+        userListeners.friends.forEach(unsubscribe => unsubscribe());
+        userListeners.friends = [];
+    }
+    
     localStorage.removeItem('currentUserId');
     currentUser = null;
     document.getElementById('authScreen').classList.add('active');
@@ -355,6 +425,9 @@ async function addFriend() {
     
     currentUser.friends.push(friendId);
     await saveUserToFirebase(currentUser);
+    
+    // ⭐ NEW: Setup real-time sync for the new friend
+    setupFriendsRealtimeSync();
     
     closeAddFriendModal();
     renderFriends();
