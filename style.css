@@ -727,45 +727,62 @@ body {
 .message-actions {
     position: absolute;
     top: 5px;
-    right: -30px;
-    opacity: 0;
+    opacity: 1;
     transition: opacity 0.2s;
 }
 
-.chat-message.sent:hover .message-actions {
-    opacity: 1;
+.chat-message.sent .message-actions {
+    right: -35px;
+}
+
+.chat-message.received .message-actions {
+    left: -35px;
 }
 
 .message-delete-btn {
-    background: rgba(255, 255, 255, 0.9);
-    border: none;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #e0e0e0;
     border-radius: 50%;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-    transition: background 0.2s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s;
+    color: #666;
 }
 
 .message-delete-btn:hover {
-    background: #f0f0f0;
+    background: #f8f8f8;
+    transform: scale(1.1);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+}
+
+.message-delete-btn:active {
+    transform: scale(0.95);
 }
 
 .delete-options {
     position: absolute;
     top: 35px;
-    right: -30px;
     background: white;
     border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
     padding: 5px;
-    min-width: 180px;
+    min-width: 200px;
     z-index: 1000;
     animation: fadeIn 0.2s ease-out;
+}
+
+.chat-message.sent .delete-options {
+    right: -35px;
+}
+
+.chat-message.received .delete-options {
+    left: -35px;
 }
 
 @keyframes fadeIn {
@@ -801,7 +818,7 @@ body {
     background: #fff3cd;
 }
 
-.delete-option:nth-child(2):hover {
+.delete-option.delete-everyone:hover {
     background: #f8d7da;
     color: #721c24;
 }
@@ -820,10 +837,16 @@ body {
     color: #666;
     border-top: 1px solid #e0e0e0;
     margin-top: 5px;
+    font-weight: 500;
 }
 
 .delete-option-cancel:hover {
     background: #f0f0f0;
+}
+
+/* Close delete options when clicking outside */
+.chat-messages {
+    position: relative;
 }
 
 .message-text {
