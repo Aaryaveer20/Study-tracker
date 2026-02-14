@@ -8,6 +8,8 @@ let isSaving = false; // ⭐ NEW: Flag to prevent overwrites during save
 let pointsChartInstance = null;
 let currentChatFriend = null; // Current chat friend
 let chatListener = null; // Chat listener
+let unreadMessages = {}; // Track unread messages per friend
+let allChatsListener = null; // Listener for all chats
 
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -268,6 +270,9 @@ function showDashboard() {
     renderFriends();
     renderLeaderboard();
     renderStats();
+    
+    // Start monitoring for new messages
+    startNotificationMonitoring();
 }
 
 function updatePoints() {
@@ -288,6 +293,8 @@ function showSection(section) {
     } else if (section === 'chat') {
         document.getElementById('chatSection').classList.add('active');
         loadChatList();
+        // Hide notification badge when opening chat section
+        document.getElementById('chatNotificationBadge').style.display = 'none';
     } else if (section === 'leaderboard') {
         document.getElementById('leaderboardSection').classList.add('active');
     } else if (section === 'stats') {
@@ -780,14 +787,18 @@ async function loadChatList() {
     );
     
     container.innerHTML = friendsData.filter(f => f).map(friend => {
-        const chatId = getChatId(currentUser.id, friend.id);
+        const hasUnread = unreadMessages[friend.id] && unreadMessages[friend.id] > 0;
+        const unreadClass = hasUnread ? 'has-unread' : '';
+        const unreadBadge = hasUnread ? '<span class="unread-badge"></span>' : '';
+        
         return `
-            <div class="chat-list-item" onclick="openChat('${friend.id}', '${friend.username}')">
+            <div class="chat-list-item ${unreadClass}" onclick="openChat('${friend.id}', '${friend.username}')">
                 <div class="chat-list-avatar">${friend.username.charAt(0).toUpperCase()}</div>
                 <div class="chat-list-info">
                     <div class="chat-list-name">${friend.username}</div>
-                    <div class="chat-list-preview">Click to chat</div>
+                    <div class="chat-list-preview">Click to start chatting</div>
                 </div>
+                ${unreadBadge}
             </div>
         `;
     }).join('');
@@ -800,6 +811,13 @@ function getChatId(userId1, userId2) {
 
 async function openChat(friendId, friendName) {
     currentChatFriend = friendId;
+    
+    // Clear unread messages for this friend
+    if (unreadMessages[friendId]) {
+        unreadMessages[friendId] = 0;
+        updateNotificationBadge();
+        loadChatList(); // Refresh to remove unread indicator
+    }
     
     // Update UI
     document.getElementById('chatEmptyState').style.display = 'none';
@@ -909,4 +927,66 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Notification System
+function startNotificationMonitoring() {
+    if (!currentUser || !currentUser.friends || currentUser.friends.length === 0) {
+        return;
+    }
+    
+    // Monitor all chats for new messages
+    currentUser.friends.forEach(friendId => {
+        const chatId = getChatId(currentUser.id, friendId);
+        const messagesRef = window.dbRef(window.db, 'chats/' + chatId + '/messages');
+        
+        window.dbOnValue(messagesRef, (snapshot) => {
+            if (snapshot.exists()) {
+                let unreadCount = 0;
+                
+                snapshot.forEach((childSnapshot) => {
+                    const msg = childSnapshot.val();
+                    // Count messages from friend that are unread
+                    if (msg.senderId === friendId && msg.senderId !== currentUser.id) {
+                        // If we're not currently chatting with this friend, count as unread
+                        if (currentChatFriend !== friendId) {
+                            unreadCount++;
+                        }
+                    }
+                });
+                
+                // Update unread count for this friend
+                if (unreadCount > 0) {
+                    unreadMessages[friendId] = unreadCount;
+                } else {
+                    unreadMessages[friendId] = 0;
+                }
+                
+                updateNotificationBadge();
+            }
+        });
+    });
+}
+
+function updateNotificationBadge() {
+    const badge = document.getElementById('chatNotificationBadge');
+    
+    // Calculate total unread messages
+    let totalUnread = 0;
+    for (let friendId in unreadMessages) {
+        totalUnread += unreadMessages[friendId];
+    }
+    
+    // Show or hide badge
+    if (totalUnread > 0) {
+        badge.style.display = 'block';
+    } else {
+        badge.style.display = 'none';
+    }
+    
+    // Update chat list if it's visible
+    const chatSection = document.getElementById('chatSection');
+    if (chatSection && chatSection.classList.contains('active')) {
+        loadChatList();
+    }
 }
