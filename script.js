@@ -33,14 +33,16 @@ function initApp() {
     const savedUserId = localStorage.getItem('currentUserId');
     if (savedUserId) {
         loadUserFromFirebase(savedUserId);
+    } else {
+        // Generate ID for signup form
+        generateUserId();
     }
-    generateUserId();
 }
 
-// Generate unique user ID
+// Generate unique user ID for signup
 function generateUserId() {
     const id = 'ST' + Math.random().toString(36).substr(2, 6).toUpperCase();
-    document.getElementById('userIdInput').value = id;
+    document.getElementById('signupUserId').value = id;
 }
 
 // Firebase Operations
@@ -188,50 +190,138 @@ async function getUserFromFirebase(userId) {
     }
 }
 
-// Authentication
-async function login() {
-    const username = document.getElementById('usernameInput').value.trim();
-    const userId = document.getElementById('userIdInput').value;
+// Tab Switching
+function switchAuthTab(tab) {
+    // Update tabs
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+    
+    if (tab === 'signup') {
+        document.querySelectorAll('.auth-tab')[0].classList.add('active');
+        document.getElementById('signupForm').classList.add('active');
+    } else {
+        document.querySelectorAll('.auth-tab')[1].classList.add('active');
+        document.getElementById('loginForm').classList.add('active');
+    }
+    
+    // Clear status message
+    document.getElementById('statusMessage').textContent = '';
+}
+
+// Sign Up - Create new account
+async function signUp() {
+    const username = document.getElementById('signupUsername').value.trim();
+    const userId = document.getElementById('signupUserId').value;
     
     if (!username) {
-        alert('Please enter a username');
+        document.getElementById('statusMessage').textContent = 'Please enter a username';
         return;
     }
     
     if (!window.firebaseReady) {
-        alert('Please wait, connecting to Firebase...');
-        setTimeout(login, 1000);
+        document.getElementById('statusMessage').textContent = 'Please wait, connecting to Firebase...';
+        setTimeout(signUp, 1000);
         return;
     }
     
     try {
+        // Check if user ID already exists
         const existingUser = await getUserFromFirebase(userId);
         
         if (existingUser) {
-            currentUser = existingUser;
-        } else {
-            currentUser = {
-                id: userId,
-                username: username,
-                points: 0,
-                chapters: [],
-                friends: [],
-                pointsHistory: { daily: {}, weekly: {}, monthly: {} }
-            };
-            await saveUserToFirebase(currentUser);
+            document.getElementById('statusMessage').textContent = 'This ID already exists. Please refresh to get a new ID.';
+            return;
         }
+        
+        // Create new user
+        currentUser = {
+            id: userId,
+            username: username,
+            points: 0,
+            chapters: [],
+            friends: [],
+            pointsHistory: { daily: {}, weekly: {}, monthly: {} },
+            seenMessages: {},
+            deletedMessages: {}
+        };
+        
+        await saveUserToFirebase(currentUser);
+        localStorage.setItem('currentUserId', userId);
+        
+        showDashboard();
+        
+        // Start real-time sync after signup
+        setupRealtimeSync(userId);
+        setupFriendsRealtimeSync();
+        
+        showToast('Account created successfully! Your ID is: ' + userId, 'success');
+    } catch (error) {
+        console.error('Sign up error:', error);
+        document.getElementById('statusMessage').textContent = 'Sign up failed: ' + error.message;
+    }
+}
+
+// Log In - Access existing account
+async function logIn() {
+    const userId = document.getElementById('loginUserId').value.trim().toUpperCase();
+    
+    if (!userId) {
+        document.getElementById('statusMessage').textContent = 'Please enter your ID';
+        return;
+    }
+    
+    if (!window.firebaseReady) {
+        document.getElementById('statusMessage').textContent = 'Please wait, connecting to Firebase...';
+        setTimeout(logIn, 1000);
+        return;
+    }
+    
+    try {
+        // Check if user exists
+        const existingUser = await getUserFromFirebase(userId);
+        
+        if (!existingUser) {
+            document.getElementById('statusMessage').textContent = 'Account not found. Please check your ID or sign up.';
+            return;
+        }
+        
+        // Load existing user data
+        currentUser = existingUser;
+        
+        // Ensure all required fields exist
+        if (!currentUser.chapters) {
+            currentUser.chapters = [];
+        }
+        if (!currentUser.friends) {
+            currentUser.friends = [];
+        }
+        if (!currentUser.pointsHistory) {
+            currentUser.pointsHistory = { daily: {}, weekly: {}, monthly: {} };
+        }
+        if (currentUser.points === undefined) {
+            currentUser.points = 0;
+        }
+        if (!currentUser.seenMessages) {
+            currentUser.seenMessages = {};
+        }
+        if (!currentUser.deletedMessages) {
+            currentUser.deletedMessages = {};
+        }
+        
+        // Save the complete structure back to Firebase
+        await saveUserToFirebase(currentUser);
         
         localStorage.setItem('currentUserId', userId);
         showDashboard();
         
-        // ⭐ NEW: Start real-time sync after login
+        // Start real-time sync after login
         setupRealtimeSync(userId);
         setupFriendsRealtimeSync();
         
-        showToast('Welcome, ' + username + '!', 'success');
+        showToast('Welcome back, ' + currentUser.username + '!', 'success');
     } catch (error) {
         console.error('Login error:', error);
-        alert('Login failed: ' + error.message);
+        document.getElementById('statusMessage').textContent = 'Login failed: ' + error.message;
     }
 }
 
@@ -244,9 +334,22 @@ function logout() {
     
     localStorage.removeItem('currentUserId');
     currentUser = null;
+    currentChatFriend = null;
+    unreadMessages = {};
+    
+    // Reset to auth screen
     document.getElementById('authScreen').classList.add('active');
     document.getElementById('dashboardScreen').classList.remove('active');
-    document.getElementById('usernameInput').value = '';
+    
+    // Clear forms
+    document.getElementById('signupUsername').value = '';
+    document.getElementById('loginUserId').value = '';
+    document.getElementById('statusMessage').textContent = '';
+    
+    // Switch to signup tab by default
+    switchAuthTab('signup');
+    
+    // Generate new ID for signup
     generateUserId();
 }
 
@@ -955,7 +1058,8 @@ async function sendMessage() {
         text: text,
         senderId: currentUser.id,
         senderName: currentUser.username,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        type: 'text'
     };
     
     try {
@@ -990,6 +1094,93 @@ async function sendMessage() {
   }
 }`, 'background: #f4f4f4; padding: 10px; font-family: monospace; color: #333');
     }
+}
+
+// Image Handling Functions
+function handleImageSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        showToast('Image too large. Maximum size is 5MB', 'error');
+        return;
+    }
+    
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+        showToast('Please select an image file', 'error');
+        return;
+    }
+    
+    sendImageMessage(file);
+}
+
+async function sendImageMessage(file) {
+    if (!currentChatFriend) {
+        showToast('Please select a friend to chat with', 'error');
+        return;
+    }
+    
+    const chatId = getChatId(currentUser.id, currentChatFriend);
+    const messageId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    
+    try {
+        // Show loading state
+        showToast('Uploading image...', 'success');
+        
+        // Convert image to base64
+        const base64Image = await fileToBase64(file);
+        
+        const message = {
+            type: 'image',
+            imageData: base64Image,
+            senderId: currentUser.id,
+            senderName: currentUser.username,
+            timestamp: Date.now()
+        };
+        
+        // Send to Firebase
+        const messageRef = window.dbRef(window.db, `chats/${chatId}/messages/${messageId}`);
+        await window.dbSet(messageRef, message);
+        
+        console.log('Image sent successfully');
+        showToast('Image sent!', 'success');
+        
+        // Clear file input
+        document.getElementById('imageInput').value = '';
+        
+    } catch (error) {
+        console.error('Error sending image:', error);
+        showToast('Failed to send image', 'error');
+    }
+}
+
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+function openImageModal(imageData) {
+    // Create modal to view full image
+    const modal = document.createElement('div');
+    modal.className = 'image-modal';
+    modal.innerHTML = `
+        <div class="image-modal-content">
+            <span class="image-modal-close" onclick="this.parentElement.parentElement.remove()">&times;</span>
+            <img src="${imageData}" alt="Full size image" style="max-width: 90%; max-height: 90vh; border-radius: 10px;">
+        </div>
+    `;
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    };
+    document.body.appendChild(modal);
 }
 
 function handleChatKeyPress(event) {
