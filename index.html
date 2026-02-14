@@ -23,14 +23,19 @@
             <!-- Sign Up Form -->
             <div id="signupForm" class="auth-form active">
                 <input type="text" id="signupUsername" placeholder="Enter your username" />
-                <input type="text" id="signupUserId" placeholder="Your unique ID (auto-generated)" readonly />
+                <div class="id-display-box">
+                    <label>Your Unique ID:</label>
+                    <input type="text" id="signupUserId" readonly />
+                    <p class="id-info">💡 Save this ID to log in later!</p>
+                </div>
                 <button onclick="signUp()" class="btn-primary">Create Account</button>
             </div>
             
             <!-- Log In Form -->
-            <div id="loginForm" class="auth-form" style="display: none;">
-                <input type="text" id="loginUserId" placeholder="Enter your ID (e.g., ST5X7ABC)" />
+            <div id="loginForm" class="auth-form">
+                <input type="text" id="loginUserId" placeholder="Enter your ID (e.g., ST5X7ABC)" style="text-transform: uppercase;" />
                 <button onclick="logIn()" class="btn-primary">Log In</button>
+                <p class="forgot-id">Don't have an ID? <a href="#" onclick="switchAuthTab('signup'); return false;">Sign Up</a></p>
             </div>
             
             <p id="statusMessage" style="color: red; margin-top: 10px; font-size: 14px;"></p>
