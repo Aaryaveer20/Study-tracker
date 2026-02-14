@@ -846,6 +846,12 @@ async function loadChatMessages(friendId) {
         chatListener();
     }
     
+    // Initialize deletedMessages if not exists
+    if (!currentUser.deletedMessages) {
+        currentUser.deletedMessages = {};
+    }
+    const deletedMessageIds = currentUser.deletedMessages[chatId] || [];
+    
     // Listen for new messages in real-time
     chatListener = window.dbOnValue(messagesRef, (snapshot) => {
         const messagesContainer = document.getElementById('chatMessages');
@@ -854,10 +860,15 @@ async function loadChatMessages(friendId) {
         if (snapshot.exists()) {
             const messages = [];
             snapshot.forEach((childSnapshot) => {
-                messages.push({
-                    id: childSnapshot.key,
-                    ...childSnapshot.val()
-                });
+                const msgId = childSnapshot.key;
+                
+                // Skip if message was deleted by current user
+                if (!deletedMessageIds.includes(msgId)) {
+                    messages.push({
+                        id: msgId,
+                        ...childSnapshot.val()
+                    });
+                }
             });
             
             // Sort by timestamp
@@ -866,18 +877,40 @@ async function loadChatMessages(friendId) {
             // Render messages
             messages.forEach(msg => {
                 const messageDiv = document.createElement('div');
-                messageDiv.className = `chat-message ${msg.senderId === currentUser.id ? 'sent' : 'received'}`;
+                const isSent = msg.senderId === currentUser.id;
+                messageDiv.className = `chat-message ${isSent ? 'sent' : 'received'}`;
+                messageDiv.setAttribute('data-message-id', msg.id);
                 
                 const time = new Date(msg.timestamp).toLocaleTimeString('en-US', { 
                     hour: '2-digit', 
                     minute: '2-digit' 
                 });
                 
+                const deleteOptions = isSent ? `
+                    <div class="message-actions">
+                        <button class="message-delete-btn" onclick="showDeleteOptions('${msg.id}')" title="Delete message">
+                            <span>⋮</span>
+                        </button>
+                    </div>
+                    <div class="delete-options" id="deleteOptions_${msg.id}" style="display: none;">
+                        <button onclick="deleteMessageForMe('${chatId}', '${msg.id}')" class="delete-option">
+                            🗑️ Delete for me
+                        </button>
+                        <button onclick="deleteMessageForEveryone('${chatId}', '${msg.id}')" class="delete-option">
+                            ❌ Delete for everyone
+                        </button>
+                        <button onclick="hideDeleteOptions('${msg.id}')" class="delete-option-cancel">
+                            Cancel
+                        </button>
+                    </div>
+                ` : '';
+                
                 messageDiv.innerHTML = `
                     <div class="message-bubble">
                         <p class="message-text">${escapeHtml(msg.text)}</p>
                         <div class="message-time">${time}</div>
                     </div>
+                    ${deleteOptions}
                 `;
                 
                 messagesContainer.appendChild(messageDiv);
@@ -885,6 +918,9 @@ async function loadChatMessages(friendId) {
             
             // Scroll to bottom
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // Mark messages as seen
+            markMessagesAsSeen(friendId);
         }
     });
 }
@@ -954,10 +990,100 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Message Deletion Functions
+function showDeleteOptions(messageId) {
+    // Hide all other delete options first
+    document.querySelectorAll('.delete-options').forEach(opt => {
+        opt.style.display = 'none';
+    });
+    
+    // Show the clicked one
+    const deleteOptions = document.getElementById('deleteOptions_' + messageId);
+    if (deleteOptions) {
+        deleteOptions.style.display = 'block';
+    }
+}
+
+function hideDeleteOptions(messageId) {
+    const deleteOptions = document.getElementById('deleteOptions_' + messageId);
+    if (deleteOptions) {
+        deleteOptions.style.display = 'none';
+    }
+}
+
+async function deleteMessageForMe(chatId, messageId) {
+    try {
+        // Add to user's deleted messages list
+        if (!currentUser.deletedMessages) {
+            currentUser.deletedMessages = {};
+        }
+        if (!currentUser.deletedMessages[chatId]) {
+            currentUser.deletedMessages[chatId] = [];
+        }
+        currentUser.deletedMessages[chatId].push(messageId);
+        
+        await saveUserToFirebase(currentUser);
+        
+        // Hide the message locally
+        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (messageElement) {
+            messageElement.style.display = 'none';
+        }
+        
+        hideDeleteOptions(messageId);
+        showToast('Message deleted for you', 'success');
+    } catch (error) {
+        console.error('Error deleting message:', error);
+        showToast('Failed to delete message', 'error');
+    }
+}
+
+async function deleteMessageForEveryone(chatId, messageId) {
+    try {
+        const messageRef = window.dbRef(window.db, `chats/${chatId}/messages/${messageId}`);
+        await window.dbSet(messageRef, null); // Delete from Firebase
+        
+        hideDeleteOptions(messageId);
+        showToast('Message deleted for everyone', 'success');
+    } catch (error) {
+        console.error('Error deleting message:', error);
+        showToast('Failed to delete message', 'error');
+    }
+}
+
+// Mark messages as seen
+async function markMessagesAsSeen(friendId) {
+    const chatId = getChatId(currentUser.id, friendId);
+    
+    if (!currentUser.seenMessages) {
+        currentUser.seenMessages = {};
+    }
+    
+    currentUser.seenMessages[chatId] = Date.now();
+    
+    // Save to Firebase
+    try {
+        await saveUserToFirebase(currentUser);
+        
+        // Clear unread count for this friend
+        if (unreadMessages[friendId]) {
+            unreadMessages[friendId] = 0;
+            updateNotificationBadge();
+        }
+    } catch (error) {
+        console.error('Error marking messages as seen:', error);
+    }
+}
+
 // Notification System
 function startNotificationMonitoring() {
     if (!currentUser || !currentUser.friends || currentUser.friends.length === 0) {
         return;
+    }
+    
+    // Initialize seenMessages if not exists
+    if (!currentUser.seenMessages) {
+        currentUser.seenMessages = {};
     }
     
     // Monitor all chats for new messages
@@ -967,26 +1093,23 @@ function startNotificationMonitoring() {
         
         window.dbOnValue(messagesRef, (snapshot) => {
             if (snapshot.exists()) {
-                let unreadCount = 0;
+                let unseenCount = 0;
+                const lastSeenTime = currentUser.seenMessages[chatId] || 0;
                 
                 snapshot.forEach((childSnapshot) => {
                     const msg = childSnapshot.val();
-                    // Count messages from friend that are unread
-                    if (msg.senderId === friendId && msg.senderId !== currentUser.id) {
-                        // If we're not currently chatting with this friend, count as unread
+                    
+                    // Count unseen messages from friend (not sent by current user)
+                    if (msg.senderId === friendId && msg.timestamp > lastSeenTime) {
+                        // Only count if we're not currently viewing this chat
                         if (currentChatFriend !== friendId) {
-                            unreadCount++;
+                            unseenCount++;
                         }
                     }
                 });
                 
-                // Update unread count for this friend
-                if (unreadCount > 0) {
-                    unreadMessages[friendId] = unreadCount;
-                } else {
-                    unreadMessages[friendId] = 0;
-                }
-                
+                // Update unseen count for this friend
+                unreadMessages[friendId] = unseenCount;
                 updateNotificationBadge();
             }
         });
@@ -996,14 +1119,14 @@ function startNotificationMonitoring() {
 function updateNotificationBadge() {
     const badge = document.getElementById('chatNotificationBadge');
     
-    // Calculate total unread messages
-    let totalUnread = 0;
+    // Calculate total unseen messages
+    let totalUnseen = 0;
     for (let friendId in unreadMessages) {
-        totalUnread += unreadMessages[friendId];
+        totalUnseen += unreadMessages[friendId];
     }
     
     // Show or hide badge
-    if (totalUnread > 0) {
+    if (totalUnseen > 0) {
         badge.style.display = 'block';
     } else {
         badge.style.display = 'none';
