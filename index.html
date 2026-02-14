@@ -18,6 +18,7 @@
                 <input type="text" id="userIdInput" placeholder="Your unique ID (auto-generated)" readonly />
                 <button onclick="login()" class="btn-primary">Start Learning</button>
             </div>
+            <p id="statusMessage" style="color: red; margin-top: 10px; font-size: 14px;"></p>
         </div>
     </div>
 
@@ -190,32 +191,42 @@
     <script type="module">
         // Import Firebase modules
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-        import { getDatabase, ref, set, get, update, onValue, child } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+        import { getDatabase, ref, set, get, update, onValue } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
 
         // Firebase configuration
-        // YOU NEED TO REPLACE THIS WITH YOUR OWN FIREBASE CONFIG
-       const firebaseConfig = {
-           apiKey: "AIzaSyBVcHU9Loi8pzDWXkc5RJ9Ox8OzQKR2qJQ",
-           authDomain: "study-tracker-147df.firebaseapp.com",
-           databaseURL: "https://study-tracker-147df-default-rtdb.firebaseio.com",
-           projectId: "study-tracker-147df",
-           storageBucket: "study-tracker-147df.firebasestorage.app",
-           messagingSenderId: "866788004852",
-           appId: "1:866788004852:web:fc2d8114951d119e8d5fa1"
-       };
+        const firebaseConfig = {
+            apiKey: "AIzaSyBVcHU9Loi8pzDWXkc5RJ9Ox8OzQKR2qJQ",
+            authDomain: "study-tracker-147df.firebaseapp.com",
+            databaseURL: "https://study-tracker-147df-default-rtdb.firebaseio.com",
+            projectId: "study-tracker-147df",
+            storageBucket: "study-tracker-147df.firebasestorage.app",
+            messagingSenderId: "866788004852",
+            appId: "1:866788004852:web:fc2d8114951d119e8d5fa1"
+        };
 
         // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
+        try {
+            const app = initializeApp(firebaseConfig);
+            const database = getDatabase(app);
 
-        // Make database available globally
-        window.db = database;
-        window.dbRef = ref;
-        window.dbSet = set;
-        window.dbGet = get;
-        window.dbUpdate = update;
-        window.dbOnValue = onValue;
-        window.dbChild = child;
+            // Make database available globally
+            window.db = database;
+            window.dbRef = ref;
+            window.dbSet = set;
+            window.dbGet = get;
+            window.dbUpdate = update;
+            window.dbOnValue = onValue;
+            window.firebaseReady = true;
+            
+            console.log('✅ Firebase initialized successfully!');
+            
+            // Signal that Firebase is ready
+            window.dispatchEvent(new Event('firebaseReady'));
+        } catch (error) {
+            console.error('❌ Firebase initialization error:', error);
+            document.getElementById('statusMessage').textContent = 'Firebase connection error: ' + error.message;
+            window.firebaseReady = false;
+        }
     </script>
     
     <script src="script.js"></script>
