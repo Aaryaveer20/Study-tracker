@@ -89,12 +89,12 @@ body {
 }
 
 .auth-form {
-    display: none;
+    display: none !important;
     animation: fadeIn 0.3s ease-in;
 }
 
 .auth-form.active {
-    display: block;
+    display: block !important;
 }
 
 @keyframes fadeIn {
